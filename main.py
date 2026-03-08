@@ -1,7 +1,7 @@
 import pygame
 import sys
 
-#from environment.grid import Grid # tu strzelam nazewnictwo - Martyna
+from environment.grid import Grid # tu strzelam nazewnictwo - Martyna
 #from agent.agent import Agent # tu strzelam nazewnictwo - Ewelina
 
 # do ustalenia:
@@ -33,7 +33,7 @@ def main():
 
     assets = load_assets()
 
-    #grid = Grid(width=GRID_WIDTH, height=GRID_HEIGHT, tile_size=TILE_SIZE)
+    grid = Grid(width=GRID_WIDTH, height=GRID_HEIGHT, tile_size=TILE_SIZE)
     #agent = Agent(start_x=0, start_y=0) - Ewelina - dalem start_x i start_y, ale nie wiem jak zaimplementujesz, więc najwyżej sie zmieni
 
     running = True
@@ -46,7 +46,7 @@ def main():
 
         screen.fill((255, 255, 255))
 
-        #grid.draw(screen, assets)
+        grid.draw(screen, assets)
         #agent.draw(screen, assets)
 
         pygame.display.flip()
