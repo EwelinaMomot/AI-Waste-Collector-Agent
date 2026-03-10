@@ -2,7 +2,7 @@ import pygame
 import sys
 
 from environment.grid import Grid # tu strzelam nazewnictwo - Martyna
-#from agent.agent import Agent # tu strzelam nazewnictwo - Ewelina
+from agent.agent import Agent # tu strzelam nazewnictwo - Ewelina
 
 # do ustalenia:
 GRID_WIDTH = 16
@@ -17,10 +17,10 @@ def load_assets():
     assets = {}
 
     raw_tile = pygame.image.load('assets/pole.png')
-    #raw_agent = pygame.image.load('assets/smieciarka.png')
+    raw_agent = pygame.image.load('assets/garbage_truck.png')
 
     assets['empty_tile'] = pygame.transform.scale(raw_tile, (TILE_SIZE, TILE_SIZE))
-    #assets['agent'] = pygame.transform.scale(raw_agent, (TILE_SIZE, TILE_SIZE))
+    assets['agent'] = pygame.transform.scale(raw_agent, (TILE_SIZE, TILE_SIZE))
 
     return assets
 
@@ -34,20 +34,26 @@ def main():
     assets = load_assets()
 
     grid = Grid(width=GRID_WIDTH, height=GRID_HEIGHT, tile_size=TILE_SIZE)
-    #agent = Agent(start_x=0, start_y=0) - Ewelina - dalem start_x i start_y, ale nie wiem jak zaimplementujesz, więc najwyżej sie zmieni
+    agent = Agent(start_x=0, start_y=0) 
 
     running = True
+    frame_count = 0  
+
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-
-        #agent.move(grid)
+       
+        frame_count += 1
+        if frame_count >= 15:  # Ruszaj się co pół sekundy
+            agent.move_random(GRID_WIDTH, GRID_HEIGHT)
+            frame_count = 0  
+            
 
         screen.fill((255, 255, 255))
 
         grid.draw(screen, assets)
-        #agent.draw(screen, assets)
+        agent.draw(screen, assets, TILE_SIZE)
 
         pygame.display.flip()
         clock.tick(FPS)
