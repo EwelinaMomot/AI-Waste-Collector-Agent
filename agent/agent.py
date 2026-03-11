@@ -6,6 +6,57 @@ class Agent:
     def __init__(self,start_x, start_y):
         self.x = start_x
         self.y = start_y
+
+        # DANE ŚMIECIARKI
+        self.trash_capacity = 100
+        # SŁOWNIK: kluczem jest typ, wartością waga
+        self.inventory = {
+            "papier": 0,
+            "plastik_metal": 0,
+            "szklo": 0,
+            "bio": 0,
+            "zmieszane": 0
+        }
+        self.fuel_capacity = 100
+        self.current_fuel = 100
+        # TODO: odkomentować po dodaniu stacji na mape i w ruchu agenta odejmować zużycie paliwa
+        # self.fuel_consumption_rate = 1 
+
+    # funkcja zbierania śmieci z domu
+    def collect_trash(self, house):
+        total_now = sum(self.inventory.values())
+        
+        if house.needs_collection and total_now + house.trash_weight <= self.trash_capacity:
+            # dodajemy wagę do odpowiedniego typu w słowniku
+            if house.trash_type in self.inventory:
+                self.inventory[house.trash_type] += house.trash_weight
+            else:
+                self.inventory["zmieszane"] += house.trash_weight
+
+            house.reset_house()
+
+    # funcja wyładowania śmieciarki na wysypisku
+    def empty_tank(self, dumpster):
+        # TODO: dodać sprawdzanie, czy agent jest na wysypisku i czy w odpowiedniej strefie
+        # wywalamy tylko te śmieci, które akceptuje dana strefa
+        trash_to_unload = self.inventory[dumpster.zone_type]
+        
+        if trash_to_unload > 0:
+            self.inventory[dumpster.zone_type] = 0
+
+    def distance_to_station(self, station):
+        # liczy odległość Manhatana do stacji
+        dist_x = abs(self.x - station.x)
+        dist_y = abs(self.y - station.y)
+        return dist_x + dist_y
+    
+    def check_fuel_reserve(self, station):
+        distance = self.distance_to_station(station)
+        # 1 kratka = 1 jeden litr paliwa (dodajemy 5 na zapas)
+        if self.current_fuel <= distance + 5:
+            return True
+        return False
+
     
     # FUNKCJE RUCHU - każda zmienia pozycję o 1 kratkę (mapa to macierz)
     def move_up(self):
