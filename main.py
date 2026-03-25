@@ -7,9 +7,10 @@ from agent.agent import Agent # tu strzelam nazewnictwo - Ewelina
 # do ustalenia:
 GRID_WIDTH = 16
 GRID_HEIGHT = 16
-TILE_SIZE = 50
+TILE_SIZE = 40
+INFO_PANEL_HEIGHT = 100
 WINDOW_WIDTH = GRID_WIDTH * TILE_SIZE
-WINDOW_HEIGHT = GRID_HEIGHT * TILE_SIZE
+WINDOW_HEIGHT = (GRID_HEIGHT * TILE_SIZE) + INFO_PANEL_HEIGHT
 FPS = 30
 
 # ladowanie ikonek - jak zdecydujemy sie na nie, to trzeba wrzucac do folderu assets i tu implementowac loading
@@ -23,6 +24,17 @@ def load_assets():
     assets['agent'] = pygame.transform.scale(raw_agent, (TILE_SIZE, TILE_SIZE))
 
     return assets
+
+
+def draw_infoPanel(screen, agent):  
+    #TODO: dodać więcej danych do wyświetlenia
+    font = pygame.font.SysFont('Arial', 24)
+    fuel_text = f"Ilość paliwa: {agent.current_fuel }%"
+    
+    fuel_surf = font.render(fuel_text, True, (0, 0, 0))
+
+    ui_y_start = GRID_HEIGHT * TILE_SIZE + 10
+    screen.blit(fuel_surf, (20, ui_y_start))
 
 
 def main():
@@ -55,6 +67,12 @@ def main():
         grid.draw(screen, assets)
         agent.draw(screen, assets, TILE_SIZE)
 
+        # Rysowanie tła panelu (opcjonalnie, żeby oddzielić od mapy)
+        pygame.draw.rect(screen, (200, 200, 200), (0, GRID_HEIGHT * TILE_SIZE, WINDOW_WIDTH, INFO_PANEL_HEIGHT))
+        
+        # Wyświetlenie informacji o stanie
+        draw_infoPanel(screen, agent)
+        
         pygame.display.flip()
         clock.tick(FPS)
 
