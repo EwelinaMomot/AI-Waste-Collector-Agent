@@ -19,7 +19,9 @@ class Agent:
         }
         self.fuel_capacity = 100
         self.current_fuel = 100
-        self.fuel_consumption_rate = 1 
+        self.fuel_consumption_rate = 1
+        # Grafika domyślnie patrzy w lewo; przy jeździe w prawo — odbicie lustrzane.
+        self.facing_right = False
 
         # struktura slownikowa jako system ram (reprezentacja wiedzy)
         self.knowledge_base={
@@ -118,14 +120,16 @@ class Agent:
             self.sync_knowledge(global_state)
 
     def move_left(self, global_state):
-        if self.x > 0: 
+        if self.x > 0:
             self.x -= 1
+            self.facing_right = False
             self.current_fuel-=self.fuel_consumption_rate
             self.sync_knowledge(global_state)
 
     def move_right(self, grid_width, global_state):
-        if self.x < grid_width - 1: 
+        if self.x < grid_width - 1:
             self.x += 1
+            self.facing_right = True
             self.current_fuel-=self.fuel_consumption_rate
             self.sync_knowledge(global_state)
 
@@ -141,7 +145,9 @@ class Agent:
             self.move_right(grid_width, global_state)
 
     def draw(self, screen, assets, tile_size):
-        agent_img = assets['agent']  
+        agent_img = assets["agent"]
+        if self.facing_right:
+            agent_img = pygame.transform.flip(agent_img, True, False)
 
         pos_x = self.x * tile_size
         pos_y = self.y * tile_size
