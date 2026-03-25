@@ -14,16 +14,35 @@ WINDOW_WIDTH = GRID_WIDTH * TILE_SIZE
 WINDOW_HEIGHT = (GRID_HEIGHT * TILE_SIZE) + INFO_PANEL_HEIGHT
 FPS = 30
 
-# ladowanie ikonek - jak zdecydujemy sie na nie, to trzeba wrzucac do folderu assets i tu implementowac loading
+def scale(path):
+    img = pygame.image.load(path)
+    return pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+
+
 def load_assets():
-    assets = {}
-
-    raw_tile = pygame.image.load('assets/pole.png')
-    raw_agent = pygame.image.load('assets/garbage_truck.png')
-
-    assets['empty_tile'] = pygame.transform.scale(raw_tile, (TILE_SIZE, TILE_SIZE))
-    assets['agent'] = pygame.transform.scale(raw_agent, (TILE_SIZE, TILE_SIZE))
-
+    assets = {
+        "grass": scale("assets/grass.png"),
+        "agent": scale("assets/garbage_truck.png"),
+        "station": scale("assets/station.png"),
+        "dump_mixed": scale("assets/dump_mixed.png"),
+    }
+    for key, name in [
+        ("house_paper", "house_paper.png"),
+        ("house_paper_empty", "house_paper_empty.png"),
+        ("house_plastic", "house_plastic.png"),
+        ("house_plastic_empty", "house_plastic_empty.png"),
+        ("house_glass", "house_glass.png"),
+        ("house_glass_empty", "house_glass_empty.png"),
+        ("house_bio", "house_bio.png"),
+        ("house_bio_empty", "house_bio_empty.png"),
+        ("house_mixed", "house_mixed.png"),
+        ("house_mixed_empty", "house_mixed_empty.png"),
+        ("dump_paper", "dump_paper.png"),
+        ("dump_plastic", "dump_plastic.png"),
+        ("dump_glass", "dump_glass.png"),
+        ("dump_bio", "dump_bio.png"),
+    ]:
+        assets[key] = scale(f"assets/{name}")
     return assets
 
 
@@ -81,8 +100,8 @@ def main():
 
     global_state = GlobalState()
 
-    grid = Grid(width=GRID_WIDTH, height=GRID_HEIGHT, tile_size=TILE_SIZE)
-    agent = Agent(start_x=0, start_y=0) 
+    grid = Grid(GRID_WIDTH, GRID_HEIGHT, TILE_SIZE, global_state)
+    agent = Agent(start_x=0, start_y=0)
 
     running = True
     frame_count = 0  
@@ -95,6 +114,8 @@ def main():
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_n:
                     global_state.next_day()
+                    for h in grid.iter_houses():
+                        h.generate_trash(global_state)
        
         frame_count += 1
         if frame_count >= 15:  # Ruszaj się co pół sekundy
