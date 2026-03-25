@@ -1,19 +1,40 @@
 import random
+from environment.global_state import Season
 
 class House:
-    def __init__(self, grid_x, grid_y):
+    def __init__(self, grid_x, grid_y, global_state):
         self.x = grid_x
         self.y = grid_y
-
         self.possible_types = ["papier", "plastik_metal", "szklo", "bio", "zmieszane"]
 
-        # DANE DOMU
+        self.generate_trash(global_state) # generujemy śmieci uwzględniając porę roku z global_state
+
+    def generate_trash(self, global_state):
         self.needs_collection = random.choice([True, False])  # losowo wybiera czy trzeba wywieźć śmieci
         
         if self.needs_collection:
-            self.trash_weight = random.randint(1, 15)
-            # na razie losowo przypisuje typ śmieci 
-            self.trash_type = random.choice(self.possible_types)
+            # wpływ pory roku na wage i typ śmieci
+            # Lato
+            if global_state.current_season == Season.SUMMER:
+                self.trash_weight = random.randint(5, 15)
+                types_for_season = self.possible_types + ["bio", "bio"]  # latem więcej odpadów bio
+            
+            # Zima
+            elif global_state.current_season == Season.WINTER:
+                self.trash_weight = random.randint(10, 25)
+                types_for_season = self.possible_types + ["zmieszane", "zmieszane"]
+            
+            # Jesień
+            elif global_state.current_season == Season.AUTUMN:
+                self.trash_weight = random.randint(5, 20)
+                types_for_season = self.possible_types + ["bio"]
+
+            # Wiosna
+            else:
+                self.trash_weight = random.randint(1, 10)
+                types_for_season = self.possible_types
+                 
+            self.trash_type = random.choice(types_for_season)
         else:
             self.trash_weight = 0
             self.trash_type = None
