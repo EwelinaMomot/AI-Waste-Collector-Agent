@@ -1,6 +1,8 @@
 import pygame
 import sys
-
+from search.state import E
+from search.bfs import bfs
+from search.problem import GridSearchProblem
 from environment.global_state import GlobalState
 from environment.grid import Grid # tu strzelam nazewnictwo - Martyna
 from agent.agent import Agent # tu strzelam nazewnictwo - Ewelina
@@ -101,7 +103,10 @@ def main():
     global_state = GlobalState()
 
     grid = Grid(GRID_WIDTH, GRID_HEIGHT, TILE_SIZE, global_state)
-    agent = Agent(start_x=0, start_y=0)
+    agent = Agent(start_x=0, start_y=0, initial_direction=E)
+
+    planned_path = []  # Tu będziemy przechowywać listę akcji z BFS
+    current_target = None # Współrzędne celu, do którego jedziemy
 
     running = True
     frame_count = 0  
@@ -116,12 +121,36 @@ def main():
                     global_state.next_day()
                     for h in grid.iter_houses():
                         h.generate_trash(global_state)
+
+                # zmiana celu: Po wciśnięciu SPACJI śmieciarka wybiera nowy cel i szuka do niego drogi
+                if event.key == pygame.K_SPACE:
+                    # Przykładowy cel: szukamy domu, który potrzebuje odbioru śmieci
+                    target_house = None
+                    for h in grid.iter_houses():
+                        if h.needs_collection: # Sprawdzamy, czy dom ma śmieci
+                            target_house = h
+                            break
+                    
+                    if target_house:
+                        current_target = (target_house.x, target_house.y)
+                        # Tworzymy problem wyszukiwania
+                        problem = GridSearchProblem(grid, target_house.x, target_house.y)
+                        planned_path = bfs((agent.x, agent.y, agent.direction), current_target, problem)
+                        print(f"Zaplanowana trasa: {planned_path}")
        
         frame_count += 1
         if frame_count >= 15:  # Ruszaj się co pół sekundy
-            agent.move_random(GRID_WIDTH, GRID_HEIGHT, global_state)
-            frame_count = 0  
-            
+           # WYKONANIE RUCHU: Jeśli mamy zaplanowaną ścieżkę, wykonujemy jeden krok co kilka klatek
+            if planned_path:
+                next_action = planned_path.pop(0) # Pobierz pierwszą akcję z listy
+                agent.execute_action(next_action, global_state) 
+                
+                #Jeśli to był ostatni krok, zbierz śmieci
+                if not planned_path:
+                    cell = grid.cells[agent.y][agent.x]
+                    if cell and hasattr(cell, 'needs_collection'):
+                        agent.collect_trash(cell, global_state)
+                        print(f"Zebrano śmieci! Stan baku: {sum(agent.inventory.values())}")
 
         screen.fill((255, 255, 255))
 

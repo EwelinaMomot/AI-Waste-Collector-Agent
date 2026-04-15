@@ -2,12 +2,14 @@ from environment import house
 import pygame
 import random
 from environment.global_state import Weather
+from search.state import N, E, S, W, DX, DY
 
 class Agent:
 
-    def __init__(self,start_x, start_y):
+    def __init__(self,start_x, start_y, initial_direction=E):
         self.x = start_x
         self.y = start_y
+        self.direction = initial_direction  # 0=N, 1=E, 2=S, 3=W
         self.trash_capacity = 100
         # SŁOWNIK: kluczem jest typ, wartością waga
         self.inventory = {
@@ -31,13 +33,39 @@ class Agent:
             "fuel_capacity": self.fuel_capacity,
             "trash_capacity": self.trash_capacity,
             "current_trash": sum(self.inventory.values()),
-            "detailed_inventory": self.inventory.copy()
+            "detailed_inventory": self.inventory.copy(),
         },
+        "agent_info":{
+            "position": (self.x, self.y),
+            "direction": self.get_direction_name()
+        },
+
         "environment": { 
                 "weather": "SUNNY",
                 "day_of_the_week": "Monday",
                 "fuel_cost_multiplier": 1.0 
         }}
+
+    #metody ruchu 
+    def turn_left(self):
+        self.direction = (self.direction - 1) % 4
+
+    def turn_right(self):
+        self.direction = (self.direction + 1) % 4
+
+    def move_forward(self):
+        self.x += DX[self.direction]
+        self.y += DY[self.direction]
+        # Aktualizacja wizualna
+        if self.direction == E:
+            self.facing_right = True
+        elif self.direction == W: # domyślnie ustawiona w prawo przy jeździe góra/dół
+            self.facing_right = False
+
+    def get_direction_name(self):
+        # zamienia liczby na litery np: "0" na "N"
+        names = {N: "N", E: "E", S: "S", W: "W"}
+        return names[self.direction]
 
     #Metoda synchronizująca stan faktyczny z bazą wiedzy agenta  
     def sync_knowledge(self, global_state):
@@ -45,6 +73,10 @@ class Agent:
         self.knowledge_base["resources"]["current_fuel"] = self.current_fuel
         self.knowledge_base["resources"]["current_trash"] = sum(self.inventory.values())
         self.knowledge_base["resources"]["detailed_inventory"] = self.inventory.copy()
+
+        #dane o pozycji
+        self.knowledge_base["agent_info"]["position"] = (self.x, self.y)
+        self.knowledge_base["agent_info"]["direction"] = self.get_direction_name()
 
         # pobieranie pogody i dnia
         self.knowledge_base["environment"]["weather"] = global_state.current_weather.name
@@ -70,6 +102,7 @@ class Agent:
     def collect_trash(self, house, global_state):
         total_now = sum(self.inventory.values())
         allowed_today = global_state.get_allowed_types_today()
+        house.needs_collection = False
         
         if house.needs_collection and total_now + house.trash_weight <= self.trash_capacity:
             # dodajemy wagę do odpowiedniego typu w słowniku
@@ -105,44 +138,19 @@ class Agent:
             return True
         return False
 
+    def execute_action(self, action_name, global_state):
+        """Łącznik: zamienia tekst z BFS na fizyczne działanie agenta"""
+        if action_name == "obrót w lewo":
+            self.turn_left()
+        elif action_name == "obrót w prawo":
+            self.turn_right()
+        elif action_name == "przód":
+            # Zużycie paliwa dzieje się tylko przy faktycznym ruchu
+            self.move_forward()
+            self.current_fuel -= self.fuel_consumption_rate
     
-    # FUNKCJE RUCHU - każda zmienia pozycję o 1 kratkę (mapa to macierz)
-    def move_up(self, global_state):
-        if self.y > 0: 
-            self.y -= 1
-            self.current_fuel-=self.fuel_consumption_rate
-            self.sync_knowledge(global_state)
-
-    def move_down(self, grid_height, global_state):
-        if self.y < grid_height - 1: 
-            self.y += 1
-            self.current_fuel-=self.fuel_consumption_rate
-            self.sync_knowledge(global_state)
-
-    def move_left(self, global_state):
-        if self.x > 0:
-            self.x -= 1
-            self.facing_right = False
-            self.current_fuel-=self.fuel_consumption_rate
-            self.sync_knowledge(global_state)
-
-    def move_right(self, grid_width, global_state):
-        if self.x < grid_width - 1:
-            self.x += 1
-            self.facing_right = True
-            self.current_fuel-=self.fuel_consumption_rate
-            self.sync_knowledge(global_state)
-
-    def move_random(self,grid_width, grid_height, global_state):
-        choice = random.choice(['up', 'down', 'left', 'right'])
-        if choice == 'up':
-            self.move_up(global_state)
-        elif choice == 'down':
-            self.move_down(grid_height, global_state)
-        elif choice == 'left':
-            self.move_left(global_state)
-        elif choice == 'right':
-            self.move_right(grid_width, global_state)
+        # Po każdej akcji synchronizujemy wiedzę agenta
+        self.sync_knowledge(global_state)
 
     def draw(self, screen, assets, tile_size):
         agent_img = assets["agent"]
