@@ -102,7 +102,6 @@ class Agent:
     def collect_trash(self, house, global_state):
         total_now = sum(self.inventory.values())
         allowed_today = global_state.get_allowed_types_today()
-        house.needs_collection = False
         
         if house.needs_collection and total_now + house.trash_weight <= self.trash_capacity:
             # dodajemy wagę do odpowiedniego typu w słowniku
@@ -133,8 +132,8 @@ class Agent:
     
     def check_fuel_reserve(self, station):
         distance = self.distance_to_station(station)
-        # 1 kratka = 1 jeden litr paliwa (dodajemy 5 na zapas)
-        if self.current_fuel <= distance + 5:
+        required_fuel = distance * self.fuel_consumption_rate
+        if self.current_fuel <= required_fuel + 5:
             return True
         return False
 
