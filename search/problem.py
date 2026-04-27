@@ -11,10 +11,21 @@ ACTION_TURN_RIGHT = "obrót w prawo"
 
 class GridSearchProblem:
 
-    def __init__(self, grid, goal_x, goal_y):
+    def __init__(self, grid, goal_x, goal_y, action_costs=None, cell_entry_costs=None):
         self.grid = grid
         self.goal_x = goal_x
         self.goal_y = goal_y
+        self.action_costs = action_costs or {
+            ACTION_FORWARD: 1,
+            ACTION_TURN_LEFT: 1,
+            ACTION_TURN_RIGHT: 1,
+        }
+        self.cell_entry_costs = cell_entry_costs or {
+            "grass": 1,
+            "house": 10,
+            "dumpster": 5,
+            "station": 5,
+        }
 
     def is_goal(self, state):
         x, y, _ = state
@@ -33,15 +44,9 @@ class GridSearchProblem:
         cell = self.grid.cells[y][x]
         if cell is None:
             return False
-        if isinstance(cell, House):
-            if x == self.goal_x and y == self.goal_y:
-                return False
-            return True
-        if isinstance(cell, Dumpster) or isinstance(cell, GasStation):
-            if x == self.goal_x and y == self.goal_y:
-                return False
-            return True
-        return True
+        if isinstance(cell, House) or isinstance(cell, Dumpster) or isinstance(cell, GasStation):
+            return False
+        return False
 
     def can_move_forward(self, state):
         x, y, d = state
@@ -64,6 +69,35 @@ class GridSearchProblem:
             out.append((ACTION_FORWARD, (nx, ny, d)))
 
         return out
+
+    def get_cell_entry_cost(self, x, y):
+        cell = self.grid.cells[y][x]
+        if cell is None:
+            return self.cell_entry_costs["grass"]
+        if isinstance(cell, House):
+            return self.cell_entry_costs["house"]
+        if isinstance(cell, Dumpster):
+            return self.cell_entry_costs["dumpster"]
+        if isinstance(cell, GasStation):
+            return self.cell_entry_costs["station"]
+        return self.cell_entry_costs["grass"]
+
+    def get_action_cost(self, action, from_state, to_state):
+        if action == ACTION_FORWARD:
+            x, y, _ = to_state
+            return self.action_costs[ACTION_FORWARD] + self.get_cell_entry_cost(x, y)
+        return self.action_costs[action]
+
+    def get_successors_with_costs(self, state):
+        out = []
+        for action, next_state in self.get_successors(state):
+            step_cost = self.get_action_cost(action, state, next_state)
+            out.append((action, next_state, step_cost))
+        return out
+
+    def heuristic(self, state):
+        x, y, _ = state
+        return abs(x - self.goal_x) + abs(y - self.goal_y)
 
     def is_goal_house_with_trash(self, state):
         if not self.is_goal(state):
