@@ -1,7 +1,7 @@
 import pygame
 import sys
 from search.state import E, DX, DY
-from search.bfs import bfs
+from search.astar import astar
 from search.problem import GridSearchProblem
 import random
 from environment.global_state import GlobalState, Weather
@@ -11,11 +11,26 @@ from agent.agent import Agent # tu strzelam nazewnictwo - Ewelina
 # do ustalenia:
 GRID_WIDTH = 16
 GRID_HEIGHT = 16
-TILE_SIZE = 55
+TILE_SIZE = 40
 INFO_PANEL_HEIGHT = 100
 WINDOW_WIDTH = GRID_WIDTH * TILE_SIZE
 WINDOW_HEIGHT = (GRID_HEIGHT * TILE_SIZE) + INFO_PANEL_HEIGHT
 FPS = 30
+
+# Koszty planowania A*.
+# Łatwo można je zmieniać, aby pokazać zmianę trasy.
+ACTION_COSTS = {
+    "przód": 1,
+    "obrót w lewo": 1,
+    "obrót w prawo": 1,
+}
+
+CELL_ENTRY_COSTS = {
+    "grass": 1,
+    "house": 10,
+    "dumpster": 5,
+    "station": 5,
+}
 
 def scale(path):
     img = pygame.image.load(path)
@@ -165,7 +180,7 @@ def main():
     grid = Grid(GRID_WIDTH, GRID_HEIGHT, TILE_SIZE, global_state)
     agent = Agent(start_x=0, start_y=0, initial_direction=E)
 
-    planned_path = []  # Tu będziemy przechowywać listę akcji z BFS
+    planned_path = []  # Tu będziemy przechowywać listę akcji z A*
     path_coords = []   # tu będziemy trzymać piksele naszej linii
     weather_particles = [] # tu trzymamy płatki śniegu i deszcz
     current_target = None # Współrzędne celu, do którego jedziemy
@@ -227,8 +242,14 @@ def main():
                     if target_node:
                         current_target = (target_node.x, target_node.y)
                         # Tworzymy problem wyszukiwania
-                        problem = GridSearchProblem(grid, target_node.x, target_node.y)
-                        planned_path = bfs((agent.x, agent.y, agent.direction), current_target, problem)
+                        problem = GridSearchProblem(
+                            grid,
+                            target_node.x,
+                            target_node.y,
+                            action_costs=ACTION_COSTS,
+                            cell_entry_costs=CELL_ENTRY_COSTS,
+                        )
+                        planned_path = astar((agent.x, agent.y, agent.direction), current_target, problem) or []
                         print(f"\nZaplanowana trasa do {current_target}: {planned_path}")
 
                         path_coords = calculate_path_coords(agent.x, agent.y, agent.direction, planned_path)
