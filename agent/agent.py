@@ -1,4 +1,7 @@
 from environment import house
+from environment.dumpster import Dumpster
+from environment.house import House
+from environment.station import GasStation
 import pygame
 import random
 from environment.global_state import Weather
@@ -131,22 +134,68 @@ class Agent:
         return dist_x + dist_y
     
     def check_fuel_reserve(self, station):
-        distance = self.distance_to_station(station)
-        required_fuel = distance * self.fuel_consumption_rate
-        if self.current_fuel <= required_fuel + 5:
+        # 1. Czysta heurystyka (Odległość Manhattana)
+        # Zakłada idealną, najkrótszą drogę bez żadnych przeszkód
+        base_heuristic_distance = self.distance_to_station(station)
+        
+        # 2. Szacowanie utrudnień (pesymistyczny bufor)
+        # Agent wie, że na pewno będzie musiał się obracać (każdy obrót to koszt 1)
+        estimated_turns = 2 
+        # Dodajemy bufor na wypadek, gdyby najkrótsza trasa prowadziła przez dom (koszt 10) lub wysypisko (5)
+        obstacle_buffer = 10 
+        
+        # 3. Całkowity szacowany koszt
+        total_estimated_cost = base_heuristic_distance + estimated_turns + obstacle_buffer
+        
+        # 4. Mnożymy przez utrudnienia pogodowe
+        required_fuel = total_estimated_cost * self.fuel_consumption_rate
+        
+        # Jeśli paliwo spadnie do tego poziomu (lub niżej), rzucamy wszystko i jedziemy na stację
+        if self.current_fuel <= required_fuel:
             return True
         return False
 
-    def execute_action(self, action_name, global_state):
-        """Łącznik: zamienia tekst z BFS na fizyczne działanie agenta"""
+    def get_cell_entry_cost(self, grid, x, y):
+        """Zwraca koszt wejścia na dane pole (z siatki gry)"""
+        cell = grid.cells[y][x]
+        if cell is None:
+
+            return 1  # trawa
+        if isinstance(cell, House):
+            return 10  # dom
+        if isinstance(cell, Dumpster):
+            return 5  # wysypisko
+        if isinstance(cell, GasStation):
+            return 5  # stacja paliwa
+        return 1
+
+    def execute_action(self, action_name, global_state, grid):
+        """
+        Łącznik: zamienia tekst z A* na fizyczne działanie agenta.
+      
+        """
         if action_name == "obrót w lewo":
             self.turn_left()
+            self.current_fuel -= 1 * self.fuel_consumption_rate
         elif action_name == "obrót w prawo":
             self.turn_right()
+            self.current_fuel -= 1 * self.fuel_consumption_rate
         elif action_name == "przód":
-            # Zużycie paliwa dzieje się tylko przy faktycznym ruchu
+            # Obliczamy koszty ruchu PRZED wykonaniem ruchu
+            nx = self.x + DX[self.direction]
+            ny = self.y + DY[self.direction]
+            
+            # Pobieramy koszt pola, na które się ruszamy
+            cell_cost = self.get_cell_entry_cost(grid, nx, ny)
+            
+            # Koszt ruchu = koszt pola * mnożnik zuzycia
+            fuel_cost = cell_cost * self.fuel_consumption_rate
+            
+            # Wykonujemy ruch
             self.move_forward()
-            self.current_fuel -= self.fuel_consumption_rate
+            
+            # Zużywamy paliwo zgodnie z rzeczywistym kosztem pola
+            self.current_fuel -= fuel_cost
     
         # Po każdej akcji synchronizujemy wiedzę agenta
         self.sync_knowledge(global_state)

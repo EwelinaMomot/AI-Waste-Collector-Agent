@@ -259,7 +259,7 @@ def main():
            # WYKONANIE RUCHU: Jeśli mamy zaplanowaną ścieżkę, wykonujemy jeden krok co kilka klatek
             if planned_path:
                 next_action = planned_path.pop(0) # Pobierz pierwszą akcję z listy
-                agent.execute_action(next_action, global_state)
+                agent.execute_action(next_action, global_state,grid)
 
                 # odświeżamy linię po każdym kroku agenta (żeby znikała z tyłu)
                 path_coords = calculate_path_coords(agent.x, agent.y, agent.direction, planned_path)
