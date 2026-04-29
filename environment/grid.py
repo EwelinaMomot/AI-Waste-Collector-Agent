@@ -63,7 +63,7 @@ class Grid:
     def draw(self, screen, assets):
         for y in range(self.height):
             for x in range(self.width):
-                px = x * self.tile_size
+                px = x * self.tile_size + 290
                 py = y * self.tile_size
                 cell = self.cells[y][x]
 
@@ -75,9 +75,9 @@ class Grid:
                     key = DUMP_ASSETS.get(cell.zone_type, "dump_mixed")
                     img = assets.get(key, assets["dump_mixed"])
                 elif isinstance(cell, House):
-                    kind = cell.designated_trash_type or cell.trash_type or "zmieszane"
+                    kind = cell.trash_type or cell.designated_trash_type or "zmieszane"
                     full_k, empty_k = HOUSE_ASSETS.get(kind, HOUSE_ASSETS["zmieszane"])
-                    if cell.needs_collection and cell.trash_type is not None:
+                    if cell.needs_collection:
                         img = assets[full_k]
                     else:
                         img = assets[empty_k]
