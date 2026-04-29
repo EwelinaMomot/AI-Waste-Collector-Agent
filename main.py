@@ -11,10 +11,11 @@ from agent.agent import Agent # tu strzelam nazewnictwo - Ewelina
 # do ustalenia:
 GRID_WIDTH = 16
 GRID_HEIGHT = 16
-TILE_SIZE = 40
-INFO_PANEL_HEIGHT = 100
-WINDOW_WIDTH = GRID_WIDTH * TILE_SIZE
-WINDOW_HEIGHT = (GRID_HEIGHT * TILE_SIZE) + INFO_PANEL_HEIGHT
+TILE_SIZE = 60
+INFO_PANEL_WIDTH = 290
+BOTTOM_STATUS_HEIGHT = 40
+WINDOW_WIDTH = INFO_PANEL_WIDTH + (GRID_WIDTH * TILE_SIZE)
+WINDOW_HEIGHT = (GRID_HEIGHT * TILE_SIZE) + BOTTOM_STATUS_HEIGHT
 FPS = 30
 
 # Koszty planowania A*.
@@ -64,48 +65,76 @@ def load_assets():
     return assets
 
 
-def draw_infoPanel(screen, agent, global_state):  
-    #TODO: dodać więcej danych do wyświetlenia
-    font = pygame.font.SysFont('Arial', 22)
+def draw_infoPanel(screen, agent, global_state):
+    font = pygame.font.SysFont('Consolas', 20, bold=True)
+    
+    pygame.draw.rect(screen, (255, 255, 255), (0, 0, INFO_PANEL_WIDTH, WINDOW_HEIGHT))
+    pygame.draw.line(screen, (0, 0, 0), (INFO_PANEL_WIDTH, 0), (INFO_PANEL_WIDTH, WINDOW_HEIGHT))
+
+    x_start = 20
+    y_current = 20
 
     # 1. ZASOBY AGENTA
-    fuel_text = f"Paliwo: {int(agent.knowledge_base['resources']['current_fuel'])}%"
+    current_fuel = agent.knowledge_base["resources"]["current_fuel"]
+    max_fuel = agent.knowledge_base["resources"]["fuel_capacity"]
+    fuel_percent = max(0.0, current_fuel / max_fuel)
+
     current_trash = agent.knowledge_base["resources"]["current_trash"]
-    trash_text = f"Pojemność: {current_trash}/{agent.knowledge_base['resources']['trash_capacity']}"
+    max_trash = agent.knowledge_base["resources"]["trash_capacity"]
+    trash_percent = min(1.0, current_trash / max_trash)
     
+    bar_width = 120
+    bar_height = 22
+
+    # wyświetlanie paliwa
+    screen.blit(font.render("Paliwo:", True, (0, 0, 0)), (x_start, y_current))
+    pygame.draw.rect(screen, (200, 200, 200), (x_start + 80, y_current, bar_width, bar_height))
+    fuel_color = (92, 255, 94) if fuel_percent > 0.3 else (255, 56, 56)
+    pygame.draw.rect(screen, fuel_color, (x_start + 80, y_current, int(bar_width * fuel_percent), bar_height))
+    pygame.draw.rect(screen, (0, 0, 0), (x_start + 80, y_current, bar_width, bar_height), 1)
+    screen.blit(font.render(f"{int(current_fuel)}%", True, (0, 0, 0)), (x_start + 73 + bar_width + 10, y_current))
+
+    y_current += 40
+
+    # wyświetlanie zapełnienia śmieciarki
+    screen.blit(font.render("Śmieci:", True, (0, 0, 0)), (x_start, y_current))
+    pygame.draw.rect(screen, (200, 200, 200), (x_start + 80, y_current, bar_width, bar_height))
+    trash_color = (153, 212, 255)
+    pygame.draw.rect(screen, trash_color, (x_start + 80, y_current, int(bar_width * trash_percent), bar_height))
+    pygame.draw.rect(screen, (0, 0, 0), (x_start + 80, y_current, bar_width, bar_height), 1)
+    screen.blit(font.render(f"{int(current_trash)}/{max_trash}", True, (0, 0, 0)), (x_start + 73 + bar_width + 10, y_current))
+    
+    y_current += 60
+
     # 2. CZAS I ŚRODOWISKO
-    day_text = f"Dzień: {global_state.current_day}"
-    season_text = f"Pora roku: {global_state.current_season.name}"
-    weather_text = f"Pogoda: {global_state.current_weather.name} (Spalanie x{agent.fuel_consumption_rate})"
+    screen.blit(font.render(f"Dzień: {global_state.current_day}", True, (0, 0, 0)), (x_start, y_current))
+    y_current += 30
+    screen.blit(font.render(f"Pora: {global_state.current_season.name}", True, (0, 0, 0)), (x_start, y_current))
+    y_current += 30
+    screen.blit(font.render(f"Pogoda: {global_state.current_weather.name}", True, (0, 0, 0)), (x_start, y_current))
+    y_current += 30
+    screen.blit(font.render(f"Spalanie: x{agent.fuel_consumption_rate}", True, (0, 0, 0)), (x_start, y_current))
+
+    y_current += 60
     
     # 3. HARMONOGRAM
     allowed_list = global_state.get_allowed_types_today()
-    if allowed_list:
-        allowed_str = ", ".join(allowed_list)
-    else:
-        allowed_str = "Brak wywozu (Niedziela)"
-    schedule_text = f"Zbieramy: {allowed_str}"
-    
-    fuel_surf = font.render(fuel_text, True, (0, 0, 0))
-    trash_surf = font.render(trash_text, True, (0, 0, 0))
-    day_surf = font.render(day_text, True, (0, 0, 0))
-    season_surf = font.render(season_text, True, (0, 0, 0))
-    weather_surf = font.render(weather_text, True, (0, 0, 0))
-    schedule_surf = font.render(schedule_text, True, (0, 0, 0))
+    allowed_str = ", ".join(allowed_list) if allowed_list else "Brak wywozu"
+    screen.blit(font.render("Dzisiaj zbieramy:", True, (255, 132, 222)), (x_start, y_current))
+    screen.blit(font.render(allowed_str, True, (0, 0, 0)), (x_start, y_current + 25))
 
-    ui_y_start = GRID_HEIGHT * TILE_SIZE + 10
+    y_current += 80
 
-    # wiersz 1: Paliwo | Dzień | Pora roku
-    screen.blit(fuel_surf, (20, ui_y_start))
-    screen.blit(day_surf, (200, ui_y_start))
-    screen.blit(season_surf, (400, ui_y_start))
+    # 4. STATUS AGENTA
+    status_bg_rect = (INFO_PANEL_WIDTH, GRID_HEIGHT * TILE_SIZE, WINDOW_WIDTH - INFO_PANEL_WIDTH, BOTTOM_STATUS_HEIGHT)
+    pygame.draw.rect(screen, (255, 255, 255), status_bg_rect)
     
-    # wiersz 2: Zapełnienie śmieciarki | Pogoda i spalanie
-    screen.blit(trash_surf, (20, ui_y_start + 30))
-    screen.blit(weather_surf, (200, ui_y_start + 30))
+    status_label = font.render("KOMUNIKAT: ", True, (255, 56, 56))
+    status_val = font.render(agent.last_status, True, (0, 0, 0))
     
-    # wiersz 3: Harmonogram (na całą szerokość)
-    screen.blit(schedule_surf, (20, ui_y_start + 60))
+    text_y = GRID_HEIGHT * TILE_SIZE + 10
+    screen.blit(status_label, (INFO_PANEL_WIDTH + 10, text_y))
+    screen.blit(status_val, (INFO_PANEL_WIDTH + 10 + status_label.get_width(), text_y))
 
 
 def calculate_path_coords(start_x, start_y, start_dir, planned_path):
@@ -209,7 +238,9 @@ def main():
                     # PRIORYTET 1: agent sprawdza swój bak
                     if agent.check_fuel_reserve(station):
                         target_node = station
-                        print("\nMAŁO PALIWA! Rzucam wszystko i jadę na stację!")
+                        msg = "MAŁO PALIWA! Rzucam wszystko i jadę na stację!"
+                        print(msg)
+                        agent.last_status = msg
                     
                     # PRIORYTET 2: śmieciarka jest pełna (próg 75, bo z domku może dojść nawet 25kg)
                     elif agent.knowledge_base["resources"]["current_trash"] >= 75:
@@ -221,23 +252,29 @@ def main():
                                 cell = grid.cells[y][x]
                                 if cell and hasattr(cell, 'zone_type') and cell.zone_type == biggest_trash_type:
                                     target_node = cell
-                                    print(f"\nŚMIECIARKA PEŁNA! Jadę na wysypisko wyrzucić: {biggest_trash_type}")
+                                    msg = f"ŚMIECIARKA PEŁNA! Jadę na wysypisko wyrzucić: {biggest_trash_type}"
+                                    print(msg)
+                                    agent.last_status = msg
                                     break
                             if target_node:
                                 break
                     
-                    # PRIORYTET 3: jeśli paliwa i miejsca jest dużo, szukamy domu ze śmieciami
+                    # PRIORYTET 3: jeśli paliwa i miejsca jest dużo, szukamy najbliższego domu ze śmieciami
                     else:
                         allowed_today = global_state.get_allowed_types_today()
 
-                        for h in grid.iter_houses():
-                            if h.needs_collection and (h.trash_type in allowed_today): # Sprawdzamy, czy dom ma śmieci
-                                target_node = h
-                                break
+                        valid_houses = [h for h in grid.iter_houses() if h.needs_collection and h.trash_type in allowed_today] # lista wszystkich domów z których możena odebrać śmieci
 
-                        # jeśli agent nic nie znalazł (bo np. zebrał już wszystko na dziś)
-                        if target_node is None:
-                            print("\nWszystkie dozwolone śmieci zebrane! Wciśnij 'N', żeby zmienić dzień.")
+                        if valid_houses:
+                            # wybieramy ten dom, do którego jest najbliżej w linii prostej (odległość Manhattana)
+                            target_node = min(valid_houses, key=lambda h: abs(h.x - agent.x) + abs(h.y - agent.y))
+                            print(f"\nZnalazłem najbliższy dom! Jadę po: {target_node.trash_type}")
+                        else:
+                            # jeśli agent nic nie znalazł (bo np. zebrał już wszystko na dziś)
+                            target_node = None
+                            msg = "\nWszystkie dozwolone śmieci zebrane! Wciśnij 'N', żeby zacząć kolejny dzień."
+                            print(msg)
+                            agent.last_status = msg
                     
                     if target_node:
                         current_target = (target_node.x, target_node.y)
@@ -249,7 +286,12 @@ def main():
                             action_costs=ACTION_COSTS,
                             cell_entry_costs=CELL_ENTRY_COSTS,
                         )
-                        planned_path = astar((agent.x, agent.y, agent.direction), current_target, problem) or []
+                        path_result, visited_nodes = astar((agent.x, agent.y, agent.direction), current_target, problem) 
+                        planned_path = path_result or []
+
+                        # zapisuje odwiedzone węzły w agencie, żeby mieć do nich dostęp przy rysowaniu
+                        agent.last_visited_nodes = visited_nodes
+
                         print(f"\nZaplanowana trasa do {current_target}: {planned_path}")
 
                         path_coords = calculate_path_coords(agent.x, agent.y, agent.direction, planned_path)
@@ -269,6 +311,7 @@ def main():
                     cell = grid.cells[agent.y][agent.x]
                     # stoimy na domku ze śmieciami do zebrania
                     if cell and hasattr(cell, 'needs_collection'):
+                        agent.last_status = f"Zebrano: {cell.trash_type}, {cell.trash_weight} kg"
                         agent.collect_trash(cell, global_state)
                         print(f"\nZebrano śmieci! Zapełnienie śmieciarki: {agent.knowledge_base['resources']['current_trash']} kg")
                     # stoimy na stacji paliw
@@ -284,10 +327,20 @@ def main():
 
         grid.draw(screen, assets)
 
+        # RYSOWANIE WIZUALIZACJI A* (Heatmapa)
+        if hasattr(agent, 'last_visited_nodes'):
+            for node in agent.last_visited_nodes:
+                vx, vy, _ = node
+                rect = pygame.Surface((TILE_SIZE, TILE_SIZE))
+                rect.set_alpha(60) # przezroczystość (im więcej razy algorytm sprawdził pole, tym będzie bardziej różowe!)
+                rect.fill((251, 82, 231))
+                screen.blit(rect, (vx * TILE_SIZE+ INFO_PANEL_WIDTH, vy * TILE_SIZE))
+
         # RYSOWANIE ŚCIEŻKI
         if len(path_coords) > 1:
-            pygame.draw.lines(screen, (255, 0, 0), False, path_coords, 4)
-            cel_x, cel_y = path_coords[-1]
+            offset_coords = [(cx + INFO_PANEL_WIDTH, cy) for cx, cy in path_coords]
+            pygame.draw.lines(screen, (255, 0, 0), False, offset_coords, 4)
+            cel_x, cel_y = offset_coords[-1]
             pygame.draw.circle(screen, (0, 0, 255), (cel_x, cel_y), 5)
 
         agent.draw(screen, assets, TILE_SIZE)
@@ -295,7 +348,7 @@ def main():
         draw_weather_effects(screen, global_state, weather_particles)
 
         # Rysowanie tła panelu (opcjonalnie, żeby oddzielić od mapy)
-        pygame.draw.rect(screen, (255, 255, 255), (0, GRID_HEIGHT * TILE_SIZE, WINDOW_WIDTH, INFO_PANEL_HEIGHT))
+        pygame.draw.rect(screen, (255, 255, 255), (0, 0, INFO_PANEL_WIDTH, WINDOW_HEIGHT))
         
         # Wyświetlenie informacji o stanie
         draw_infoPanel(screen, agent, global_state)

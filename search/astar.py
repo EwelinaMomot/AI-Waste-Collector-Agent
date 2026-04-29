@@ -28,7 +28,7 @@ def astar(start_state, goal_state, problem):
         closed_list.add(n)
 
         if goal_match(n):
-            return reconstruct_actions(n, parent, action_to_reach)
+            return reconstruct_actions(n, parent, action_to_reach), closed_list
 
         for action, m, step_cost in problem.get_successors_with_costs(n):
             if m in closed_list:
@@ -42,7 +42,7 @@ def astar(start_state, goal_state, problem):
                 f_cost = new_g + problem.heuristic(m)
                 heapq.heappush(open_heap, (f_cost, new_g, m))
 
-    return None
+    return None, closed_list
 
 
 def reconstruct_actions(end, parent, action_to_reach):

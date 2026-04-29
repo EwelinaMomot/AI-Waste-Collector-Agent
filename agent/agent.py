@@ -48,6 +48,8 @@ class Agent:
                 "day_of_the_week": "Monday",
                 "fuel_cost_multiplier": 1.0 
         }}
+        self.last_status = "System gotowy"
+
 
     #metody ruchu 
     def turn_left(self):
@@ -113,7 +115,8 @@ class Agent:
                     self.inventory[house.trash_type] += house.trash_weight
                 else:
                     self.inventory["zmieszane"] += house.trash_weight
-                house.reset_house()
+                house.needs_collection = False
+                house.trash_weight = 0
 
         self.sync_knowledge(global_state)
 
@@ -205,6 +208,6 @@ class Agent:
         if self.facing_right:
             agent_img = pygame.transform.flip(agent_img, True, False)
 
-        pos_x = self.x * tile_size
+        pos_x = self.x * tile_size + 290
         pos_y = self.y * tile_size
         screen.blit(agent_img, (pos_x, pos_y))

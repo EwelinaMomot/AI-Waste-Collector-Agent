@@ -11,7 +11,8 @@ class House:
         self.generate_trash(global_state)  # generujemy śmieci uwzględniając porę roku z global_state
 
     def generate_trash(self, global_state):
-        self.needs_collection = random.choice([True, False])  # losowo wybiera czy trzeba wywieźć śmieci
+        szansa_na_smieci = random.randint(70, 100)
+        self.needs_collection = random.randint(1, 100) <= szansa_na_smieci
 
         if self.needs_collection:
             # wpływ pory roku na wage i typ śmieci
@@ -35,10 +36,15 @@ class House:
                 self.trash_weight = random.randint(1, 10)
                 types_for_season = self.possible_types
 
-            if self.designated_trash_type is not None:
-                self.trash_type = self.designated_trash_type
-            else:
-                self.trash_type = random.choice(types_for_season)
+            allowed_today = global_state.get_allowed_types_today()
+            
+            if allowed_today:
+                # 90% szans, że obywatele sprawdzili harmonogram i wystawili to, co trzeba
+                if random.random() < 0.90:
+                    self.trash_type = random.choice(allowed_today)
+                else:
+                    self.trash_type = random.choice(types_for_season)
+            # w niedziele dzień święty i nie ma śmieci wcale
         else:
             self.trash_weight = 0
             self.trash_type = None
