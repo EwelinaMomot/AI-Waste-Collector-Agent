@@ -270,9 +270,13 @@ def main():
                             target_node = min(valid_houses, key=lambda h: abs(h.x - agent.x) + abs(h.y - agent.y))
                             print(f"\nZnalazłem najbliższy dom! Jadę po: {target_node.trash_type}")
                         else:
-                            # jeśli agent nic nie znalazł (bo np. zebrał już wszystko na dziś)
-                            target_node = None
-                            msg = "\nWszystkie dozwolone śmieci zebrane! Wciśnij 'N', żeby zacząć kolejny dzień."
+                            # jeśli agent nic nie znalazł (bo np. zebrał już wszystko na dziś)                       
+                            if (agent.x, agent.y) != (station.x, station.y):
+                                # Ustawiamy cel na stację jako "powrót do domu"
+                                target_node = station 
+                                msg="\nKoniec pracy na dziś! Wracam do bazy."
+                            else:
+                                msg="\nJestem w bazie. Wciśnij 'N', żeby zacząć nowy dzień."                         
                             print(msg)
                             agent.last_status = msg
                     

@@ -108,15 +108,28 @@ class Agent:
         total_now = sum(self.inventory.values())
         allowed_today = global_state.get_allowed_types_today()
         
-        if house.needs_collection and total_now + house.trash_weight <= self.trash_capacity:
-            # dodajemy wagę do odpowiedniego typu w słowniku
-            if house.trash_type in allowed_today:    
+        if house.needs_collection and house.trash_type in allowed_today:
+            space_left = self.trash_capacity - total_now
+            
+            if space_left > 0:
+                # Agent bierze tyle, ile wlezie. Albo wszystko, albo to, co się zmieści.
+                amount_to_take = min(house.trash_weight, space_left)
+                
+                # Dodajemy do ekwipunku
                 if house.trash_type in self.inventory:
-                    self.inventory[house.trash_type] += house.trash_weight
+                    self.inventory[house.trash_type] += amount_to_take
                 else:
-                    self.inventory["zmieszane"] += house.trash_weight
-                house.needs_collection = False
-                house.trash_weight = 0
+                    self.inventory["zmieszane"] += amount_to_take
+                
+                # Aktualizujemy wagę pod domkiem
+                house.trash_weight -= amount_to_take
+                
+                if house.trash_weight <= 0:
+                    house.needs_collection = False
+                    house.trash_weight = 0
+                    print("Zabrano całe śmieci z posesji.")
+                else:
+                    print(f"Śmieciarka się przepełniła! Zostawiono {house.trash_weight}kg pod domem.")
 
         self.sync_knowledge(global_state)
 
@@ -191,15 +204,21 @@ class Agent:
             # Pobieramy koszt pola, na które się ruszamy
             cell_cost = self.get_cell_entry_cost(grid, nx, ny)
             
-            # Koszt ruchu = koszt pola * mnożnik zuzycia
-            fuel_cost = cell_cost * self.fuel_consumption_rate
+            # Liczymy współczynnik ciężaru (śmieci)
+            current_weight = self.knowledge_base["resources"]["current_trash"]
+            weight_multiplier = 1.0 + (current_weight / self.trash_capacity) * 0.5
+
+            # Koszt uwzględnia teren, pogodę oraz ciężar samej śmieciarki
+            fuel_cost = cell_cost * self.fuel_consumption_rate * weight_multiplier
             
             # Wykonujemy ruch
             self.move_forward()
             
             # Zużywamy paliwo zgodnie z rzeczywistym kosztem pola
             self.current_fuel -= fuel_cost
-    
+
+            
+                
         # Po każdej akcji synchronizujemy wiedzę agenta
         self.sync_knowledge(global_state)
 
