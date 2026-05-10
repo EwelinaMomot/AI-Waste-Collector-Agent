@@ -6,6 +6,9 @@ import pygame
 import random
 from environment.global_state import Weather
 from search.state import N, E, S, W, DX, DY
+from search.problem import  GridSearchProblem
+from search.astar import astar
+
 
 class Agent:
 
@@ -222,6 +225,102 @@ class Agent:
         # Po każdej akcji synchronizujemy wiedzę agenta
         self.sync_knowledge(global_state)
 
+    def get_discretized_state(self, global_state, grid):
+        from main import ACTION_COSTS, CELL_ENTRY_COSTS 
+        #Generuje stan kategoryczny dla dataset'u
+
+        # paliwo
+        fuel_pct = (self.current_fuel / self.fuel_capacity) * 100
+        if fuel_pct < 25:
+            fuel_cat = "CRITICAL"
+        elif fuel_pct <= 50:
+            fuel_cat = "LOW"
+        elif fuel_pct <= 75:
+            fuel_cat = "MEDIUM"
+        else:
+            fuel_cat = "HIGH"
+
+        # zapełnienie śmieciarki
+        current_trash = sum(self.inventory.values())
+        trash_pct = (current_trash / self.trash_capacity) * 100
+        if trash_pct <= 25:
+            trash_cat = "EMPTY"
+        elif trash_pct <= 50:
+            trash_cat = "LOW"
+        elif trash_pct <= 75:
+            trash_cat = "MEDIUM"
+        else:
+            trash_cat = "FULL"
+
+        # pogoda
+        weather_cat = global_state.current_weather.name
+
+        # dzień tygodnia
+        day_cat = global_state.current_day
+
+        # pora roku
+        season_cat = global_state.current_season.name
+
+        #dystans
+        station_node = grid.cells[0][grid.width - 1]
+        station_problem = GridSearchProblem(
+            grid, station_node.x, station_node.y, 
+            action_costs=ACTION_COSTS, cell_entry_costs=CELL_ENTRY_COSTS
+        )
+        station_path, _ = astar((self.x, self.y, self.direction), (station_node.x, station_node.y), station_problem)
+        
+        # Długość ścieżki A* (lub bardzo dużo, jeśli brak ścieżki)
+        dist_to_station = len(station_path) if station_path else 999 
+
+        if dist_to_station <= 5: dist_station_cat = "NEAR"
+        elif dist_to_station <= 15: dist_station_cat = "MEDIUM" # A* ma dłuższe ścieżki przez obroty, można zwiększyć limit
+        else: dist_station_cat = "FAR"
+
+
+        #dystans do najblizszego domu
+        nearest_house = None
+        min_path_cost = float('inf')
+        allowed_today = global_state.get_allowed_types_today()
+
+        for house in grid.iter_houses():
+            if house.needs_collection and house.trash_type in allowed_today:
+                
+                problem = GridSearchProblem(
+                    grid, house.x, house.y, 
+                    action_costs=ACTION_COSTS, cell_entry_costs=CELL_ENTRY_COSTS
+                )
+                path, _ = astar((self.x, self.y, self.direction), (house.x, house.y), problem)
+                
+                if path:
+                    cost = len(path)
+                    if cost < min_path_cost:
+                        min_path_cost = cost
+                        nearest_house = house
+
+        
+        if nearest_house and min_path_cost != float('inf'):
+            if min_path_cost <= 5:
+                dist_house_cat = "NEAR"
+            elif min_path_cost <= 15: 
+                dist_house_cat = "MEDIUM"
+            else:
+                dist_house_cat = "FAR"
+            
+            if nearest_house.trash_weight < 10:
+                weight_cat = "SMALL"
+            elif nearest_house.trash_weight <= 20:
+                weight_cat = "MEDIUM"
+            else:
+                weight_cat = "LARGE"
+        else:
+            dist_house_cat = "NONE"
+            weight_cat = "NONE"
+
+        return [
+            fuel_cat, trash_cat, weather_cat, day_cat, 
+            season_cat, dist_house_cat, dist_station_cat, weight_cat
+        ]
+    
     def draw(self, screen, assets, tile_size):
         agent_img = assets["agent"]
         if self.facing_right:
