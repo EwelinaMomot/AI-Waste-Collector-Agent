@@ -6,13 +6,26 @@ import pygame
 import random
 from environment.global_state import Weather
 from search.state import N, E, S, W, DX, DY
-from search.problem import  GridSearchProblem
+from search.problem import GridSearchProblem
 from search.astar import astar
+from search.planner_costs import ACTION_COSTS, CELL_ENTRY_COSTS
+
+
+TREE_STATE_KEYS = [
+    "Fuel",
+    "Trash",
+    "Weather",
+    "Day",
+    "Season",
+    "Dist_House",
+    "Dist_Station",
+    "Weight",
+]
 
 
 class Agent:
 
-    def __init__(self,start_x, start_y, initial_direction=E):
+    def __init__(self, start_x, start_y, initial_direction=E):
         self.x = start_x
         self.y = start_y
         self.direction = initial_direction  # 0=N, 1=E, 2=S, 3=W
@@ -25,8 +38,8 @@ class Agent:
             "bio": 0,
             "zmieszane": 0
         }
-        self.fuel_capacity = 100
-        self.current_fuel = 100
+        self.fuel_capacity = 150
+        self.current_fuel = 150
         self.fuel_consumption_rate = 1
         # Grafika domyślnie patrzy w lewo; przy jeździe w prawo — odbicie lustrzane.
         self.facing_right = False
@@ -52,9 +65,146 @@ class Agent:
                 "fuel_cost_multiplier": 1.0 
         }}
         self.last_status = "System gotowy"
+        self.decision_tree = None
 
+    def attach_decision_tree(self, tree):
+        self.decision_tree = tree
 
-    #metody ruchu 
+    def get_tree_state_dict(self, global_state, grid):
+        row = self.get_discretized_state(global_state, grid)
+        return dict(zip(TREE_STATE_KEYS, row))
+
+    _FUEL_ROUNDTRIP_SAFETY_MARGIN = 1.18
+
+    def _path_actions_to(self, grid, start_xyd, goal_x, goal_y):
+        problem = GridSearchProblem(
+            grid,
+            goal_x,
+            goal_y,
+            action_costs=ACTION_COSTS,
+            cell_entry_costs=CELL_ENTRY_COSTS,
+        )
+        path, _ = astar(start_xyd, (goal_x, goal_y), problem)
+        return path
+
+    def _fuel_and_pose_after_actions(self, grid, sx, sy, sd, actions, trash_kg):
+        x, y, d = sx, sy, sd
+        rate = self.fuel_consumption_rate
+        wm = 1.0 + (trash_kg / self.trash_capacity) * 0.5
+        fuel = 0.0
+        for action in actions:
+            if action == "obrót w lewo":
+                fuel += 1 * rate
+                d = (d - 1) % 4
+            elif action == "obrót w prawo":
+                fuel += 1 * rate
+                d = (d + 1) % 4
+            elif action == "przód":
+                nx = x + DX[d]
+                ny = y + DY[d]
+                cell_cost = self.get_cell_entry_cost(grid, nx, ny)
+                fuel += cell_cost * rate * wm
+                x, y = nx, ny
+        return fuel, x, y, d
+
+    def _fuel_ok_to_primary_then_station(self, grid, primary_cell):
+        station = grid.cells[0][grid.width - 1]
+        trash0 = sum(self.inventory.values())
+        start = (self.x, self.y, self.direction)
+
+        path1 = self._path_actions_to(grid, start, primary_cell.x, primary_cell.y)
+        if not path1:
+            return False
+
+        fuel1, ax, ay, ad = self._fuel_and_pose_after_actions(
+            grid, self.x, self.y, self.direction, path1, trash0
+        )
+
+        if isinstance(primary_cell, House):
+            space = max(0, self.trash_capacity - trash0)
+            take = min(getattr(primary_cell, "trash_weight", 0), space)
+            trash1 = min(self.trash_capacity, trash0 + take)
+        elif isinstance(primary_cell, Dumpster):
+            unload = self.inventory.get(primary_cell.zone_type, 0)
+            trash1 = max(0.0, trash0 - unload)
+        else:
+            trash1 = trash0
+
+        path2 = self._path_actions_to(grid, (ax, ay, ad), station.x, station.y)
+        if not path2:
+            return False
+
+        fuel2, _, _, _ = self._fuel_and_pose_after_actions(
+            grid, ax, ay, ad, path2, trash1
+        )
+
+        need = (fuel1 + fuel2) * self._FUEL_ROUNDTRIP_SAFETY_MARGIN
+        return self.current_fuel >= need
+
+    def select_target_using_tree(self, global_state, grid):
+        self.sync_knowledge(global_state)
+        if self.decision_tree is None:
+            return None, "Brak podpiętego drzewa decyzyjnego."
+
+        state_dict = self.get_tree_state_dict(global_state, grid)
+        decision = self.decision_tree.predict(state_dict)
+        station = grid.cells[0][grid.width - 1]
+
+        msg = f"Drzewo ({decision}): stan={state_dict}"
+
+        if decision == "STATION":
+            return station, msg
+
+        if decision == "DUMP":
+            total = sum(self.inventory.values())
+            if total <= 0:
+                return station, msg + " → brak śmieci do zrzutu, jadę na stację."
+            biggest_trash_type = max(self.inventory, key=self.inventory.get)
+            target_node = None
+            for y in range(grid.height):
+                for x in range(grid.width):
+                    cell = grid.cells[y][x]
+                    if cell and hasattr(cell, "zone_type") and cell.zone_type == biggest_trash_type:
+                        target_node = cell
+                        break
+                if target_node:
+                    break
+            if target_node:
+                if not self._fuel_ok_to_primary_then_station(grid, target_node):
+                    return (
+                        station,
+                        msg
+                        + f" → zrzut: {biggest_trash_type} [paliwo: za mało na powrót na stację — tankowanie]",
+                    )
+                return target_node, msg + f" → zrzut: {biggest_trash_type}"
+            return station, msg + " → brak strefy na mapie, stacja."
+
+        if decision == "HOUSE":
+            allowed_today = global_state.get_allowed_types_today()
+            valid_houses = [
+                h
+                for h in grid.iter_houses()
+                if h.needs_collection and h.trash_type in allowed_today
+            ]
+            if valid_houses:
+                target_node = min(
+                    valid_houses,
+                    key=lambda h: abs(h.x - self.x) + abs(h.y - self.y),
+                )
+                if not self._fuel_ok_to_primary_then_station(grid, target_node):
+                    return (
+                        station,
+                        msg
+                        + f" → dom {target_node.trash_type} [paliwo: za mało na powrót na stację — tankowanie]",
+                    )
+                return target_node, msg + f" → dom {target_node.trash_type}"
+            if (self.x, self.y) != (station.x, station.y):
+                return station, msg + " → brak domów z odbiorem, wracam do bazy."
+            return None, msg + " → brak domów; jestem w bazie (N — nowy dzień)."
+
+        return None, f"Nieznana decyzja drzewa: {decision}"
+
+    # metody ruchu 
     def turn_left(self):
         self.direction = (self.direction - 1) % 4
 
@@ -226,8 +376,7 @@ class Agent:
         self.sync_knowledge(global_state)
 
     def get_discretized_state(self, global_state, grid):
-        from main import ACTION_COSTS, CELL_ENTRY_COSTS 
-        #Generuje stan kategoryczny dla dataset'u
+        # Generuje stan kategoryczny dla zbioru uczącego / drzewa
 
         # paliwo
         fuel_pct = (self.current_fuel / self.fuel_capacity) * 100
@@ -264,8 +413,11 @@ class Agent:
         #dystans
         station_node = grid.cells[0][grid.width - 1]
         station_problem = GridSearchProblem(
-            grid, station_node.x, station_node.y, 
-            action_costs=ACTION_COSTS, cell_entry_costs=CELL_ENTRY_COSTS
+            grid,
+            station_node.x,
+            station_node.y,
+            action_costs=ACTION_COSTS,
+            cell_entry_costs=CELL_ENTRY_COSTS,
         )
         station_path, _ = astar((self.x, self.y, self.direction), (station_node.x, station_node.y), station_problem)
         
@@ -286,8 +438,11 @@ class Agent:
             if house.needs_collection and house.trash_type in allowed_today:
                 
                 problem = GridSearchProblem(
-                    grid, house.x, house.y, 
-                    action_costs=ACTION_COSTS, cell_entry_costs=CELL_ENTRY_COSTS
+                    grid,
+                    house.x,
+                    house.y,
+                    action_costs=ACTION_COSTS,
+                    cell_entry_costs=CELL_ENTRY_COSTS,
                 )
                 path, _ = astar((self.x, self.y, self.direction), (house.x, house.y), problem)
                 
