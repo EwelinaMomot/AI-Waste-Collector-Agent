@@ -1,0 +1,93 @@
+Drzewo decyzyjne ID3 — podgląd struktury
+==================================================
+[Fuel]
+  == 'CRITICAL'
+  => STATION
+  == 'HIGH'
+  [Trash]
+    == 'EMPTY'
+    => HOUSE
+    == 'FULL'
+    => DUMP
+    == 'LOW'
+    => HOUSE
+    == 'MEDIUM'
+    [Weather]
+      == 'RAINY'
+      [Day]
+        == 'Friday'
+        => HOUSE
+        == 'Wednesday'
+        [Dist_House]
+          == 'MEDIUM'
+          => DUMP
+          == 'NEAR'
+          => HOUSE
+      == 'SNOWY'
+      [Dist_House]
+        == 'MEDIUM'
+        => DUMP
+        == 'NEAR'
+        => HOUSE
+      == 'SUNNY'
+      => HOUSE
+  == 'LOW'
+  [Trash]
+    == 'FULL'
+    [Season]
+      == 'AUTUMN'
+      => STATION
+      == 'SPRING'
+      => STATION
+      == 'SUMMER'
+      [Dist_Station]
+        == 'FAR'
+        => STATION
+        == 'MEDIUM'
+        => DUMP
+      == 'WINTER'
+      => STATION
+    == 'LOW'
+    [Day]
+      == 'Friday'
+      => STATION
+      == 'Monday'
+      => STATION
+      == 'Saturday'
+      => HOUSE
+      == 'Thursday'
+      [Season]
+        == 'SPRING'
+        => STATION
+        == 'SUMMER'
+        => HOUSE
+      == 'Tuesday'
+      [Season]
+        == 'AUTUMN'
+        => HOUSE
+        == 'SUMMER'
+        => STATION
+      == 'Wednesday'
+      => STATION
+    == 'MEDIUM'
+    [Weather]
+      == 'RAINY'
+      => STATION
+      == 'SNOWY'
+      => HOUSE
+      == 'SUNNY'
+      => HOUSE
+  == 'MEDIUM'
+  [Trash]
+    == 'EMPTY'
+    => HOUSE
+    == 'FULL'
+    => DUMP
+    == 'LOW'
+    => HOUSE
+    == 'MEDIUM'
+    [Dist_House]
+      == 'MEDIUM'
+      => DUMP
+      == 'NEAR'
+      => HOUSE
