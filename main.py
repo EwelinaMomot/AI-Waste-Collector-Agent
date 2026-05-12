@@ -116,8 +116,7 @@ def draw_infoPanel(screen, agent, global_state):
     fuel_color = (92, 255, 94) if fuel_percent > 0.3 else (255, 56, 56)
     pygame.draw.rect(screen, fuel_color, (x_start + 80, y_current, int(bar_width * fuel_percent), bar_height))
     pygame.draw.rect(screen, (0, 0, 0), (x_start + 80, y_current, bar_width, bar_height), 1)
-    screen.blit(font.render(f"{int(current_fuel)}%", True, (0, 0, 0)), (x_start + 73 + bar_width + 10, y_current))
-
+    screen.blit(font.render(f"{int(fuel_percent * 100)}%", True, (0, 0, 0)), (x_start + 73 + bar_width + 10, y_current))
     y_current += 40
 
     # wyświetlanie zapełnienia śmieciarki
