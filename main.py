@@ -1,12 +1,18 @@
-import pygame
-import sys
-from search.state import E, DX, DY
-from search.astar import astar
-from search.problem import GridSearchProblem
+import os
 import random
+import sys
+
+import pandas as pd
+import pygame
+
+from agent.agent import Agent  # tu strzelam nazewnictwo - Ewelina
 from environment.global_state import GlobalState, Weather
-from environment.grid import Grid # tu strzelam nazewnictwo - Martyna
-from agent.agent import Agent # tu strzelam nazewnictwo - Ewelina
+from environment.grid import Grid  # tu strzelam nazewnictwo - Martyna
+from ml.decision_tree import DecisionTreeID3
+from search.astar import astar
+from search.planner_costs import ACTION_COSTS, CELL_ENTRY_COSTS
+from search.problem import GridSearchProblem
+from search.state import E, DX, DY
 
 # do ustalenia:
 GRID_WIDTH = 16
@@ -18,20 +24,38 @@ WINDOW_WIDTH = INFO_PANEL_WIDTH + (GRID_WIDTH * TILE_SIZE)
 WINDOW_HEIGHT = (GRID_HEIGHT * TILE_SIZE) + BOTTOM_STATUS_HEIGHT
 FPS = 30
 
-# Koszty planowania A*.
-# Łatwo można je zmieniać, aby pokazać zmianę trasy.
-ACTION_COSTS = {
-    "przód": 1,
-    "obrót w lewo": 1,
-    "obrót w prawo": 1,
-}
 
-CELL_ENTRY_COSTS = {
-    "grass": 1,
-    "house": 10,
-    "dumpster": 5,
-    "station": 5,
-}
+def pick_target_heuristic(agent, global_state, grid, grid_width):
+    station = grid.cells[0][grid_width - 1]
+    if agent.check_fuel_reserve(station):
+        return station, "MAŁO PALIWA! Rzucam wszystko i jadę na stację!"
+    if agent.knowledge_base["resources"]["current_trash"] >= 75:
+        biggest_trash_type = max(agent.inventory, key=agent.inventory.get)
+        for y in range(grid.height):
+            for x in range(grid.width):
+                cell = grid.cells[y][x]
+                if cell and hasattr(cell, "zone_type") and cell.zone_type == biggest_trash_type:
+                    return (
+                        cell,
+                        f"ŚMIECIARKA PEŁNA! Jadę na wysypisko wyrzucić: {biggest_trash_type}",
+                    )
+        return None, "ŚMIECIARKA PEŁNA, ale nie znaleziono kontenera na mapie."
+    allowed_today = global_state.get_allowed_types_today()
+    valid_houses = [
+        h
+        for h in grid.iter_houses()
+        if h.needs_collection and h.trash_type in allowed_today
+    ]
+    if valid_houses:
+        target_node = min(
+            valid_houses,
+            key=lambda h: abs(h.x - agent.x) + abs(h.y - agent.y),
+        )
+        return target_node, f"Znalazłem najbliższy dom! Jadę po: {target_node.trash_type}"
+    if (agent.x, agent.y) != (station.x, station.y):
+        return station, "Koniec pracy na dziś! Wracam do bazy."
+    return None, "Jestem w bazie. Wciśnij 'N', żeby zacząć nowy dzień."
+
 
 def scale(path):
     img = pygame.image.load(path)
@@ -376,7 +400,15 @@ def main():
     grid = Grid(GRID_WIDTH, GRID_HEIGHT, TILE_SIZE, global_state)
     agent = Agent(start_x=0, start_y=0, initial_direction=E)
 
-    planned_path = []  # Tu będziemy przechowywać listę akcji z A*
+    decision_model = DecisionTreeID3()
+    train_df = pd.read_csv("data/garbage_truck_data.csv", sep=";")
+    decision_model.train(train_df, target_column="Decision")
+    os.makedirs("output", exist_ok=True)
+    decision_model.save_tree_preview("output/decision_tree.txt")
+    decision_model.export_graphviz_dot("output/decision_tree.dot")
+    decision_model.print_tree()
+    agent.attach_decision_tree(decision_model)
+    planned_path = []
     path_coords = []   # tu będziemy trzymać piksele naszej linii
     weather_particles = [] # tu trzymamy płatki śniegu i deszcz
     current_target = None # Współrzędne celu, do którego jedziemy
@@ -412,54 +444,17 @@ def main():
 
                 if (event.type==pygame.KEYDOWN and event.key == pygame.K_SPACE) or  event.type==AUTO_SPACE_EVENT:
                     print("Spacja naciśnięta - wybieram cel...")
-                    target_node = None
-                    station = grid.cells[0][GRID_WIDTH - 1]
-
-                    # PRIORYTET 1: agent sprawdza swój bak
-                    if agent.check_fuel_reserve(station):
-                        target_node = station
-                        msg = "MAŁO PALIWA! Rzucam wszystko i jadę na stację!"
-                        print(msg)
-                        agent.last_status = msg
-                    
-                    # PRIORYTET 2: śmieciarka jest pełna (próg 75, bo z domku może dojść nawet 25kg)
-                    elif agent.knowledge_base["resources"]["current_trash"] >= 75:
-                        biggest_trash_type = max(agent.inventory, key=agent.inventory.get)
-                        
-                        # przeszukujemy mapę w poszukiwaniu odpowiedniego kontenera na wysypisku
-                        for y in range(grid.height):
-                            for x in range(grid.width):
-                                cell = grid.cells[y][x]
-                                if cell and hasattr(cell, 'zone_type') and cell.zone_type == biggest_trash_type:
-                                    target_node = cell
-                                    msg = f"ŚMIECIARKA PEŁNA! Jadę na wysypisko wyrzucić: {biggest_trash_type}"
-                                    print(msg)
-                                    agent.last_status = msg
-                                    break
-                            if target_node:
-                                break
-                    
-                    # PRIORYTET 3: jeśli paliwa i miejsca jest dużo, szukamy najbliższego domu ze śmieciami
+                    if datasetCreationMode:
+                        target_node, msg = pick_target_heuristic(
+                            agent, global_state, grid, GRID_WIDTH
+                        )
                     else:
-                        allowed_today = global_state.get_allowed_types_today()
+                        target_node, msg = agent.select_target_using_tree(
+                            global_state, grid
+                        )
+                    print(msg)
+                    agent.last_status = msg
 
-                        valid_houses = [h for h in grid.iter_houses() if h.needs_collection and h.trash_type in allowed_today] # lista wszystkich domów z których możena odebrać śmieci
-
-                        if valid_houses:
-                            # wybieramy ten dom, do którego jest najbliżej w linii prostej (odległość Manhattana)
-                            target_node = min(valid_houses, key=lambda h: abs(h.x - agent.x) + abs(h.y - agent.y))
-                            print(f"\nZnalazłem najbliższy dom! Jadę po: {target_node.trash_type}")
-                        else:
-                            # jeśli agent nic nie znalazł (bo np. zebrał już wszystko na dziś)                       
-                            if (agent.x, agent.y) != (station.x, station.y):
-                                # Ustawiamy cel na stację jako "powrót do domu"
-                                target_node = station 
-                                msg="\nKoniec pracy na dziś! Wracam do bazy."
-                            else:
-                                msg="\nJestem w bazie. Wciśnij 'N', żeby zacząć nowy dzień."                         
-                            print(msg)
-                            agent.last_status = msg
-                    
                     if target_node:
 
                         if datasetCreationMode:
