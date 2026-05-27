@@ -9,6 +9,7 @@ from agent.agent import Agent  # tu strzelam nazewnictwo - Ewelina
 from environment.global_state import GlobalState, Weather
 from environment.grid import Grid  # tu strzelam nazewnictwo - Martyna
 from ml.decision_tree import DecisionTreeID3
+from ml.trash_classifier import TrashClassifier
 from search.astar import astar
 from search.planner_costs import ACTION_COSTS, CELL_ENTRY_COSTS
 from search.problem import GridSearchProblem
@@ -45,6 +46,7 @@ def pick_target_heuristic(agent, global_state, grid, grid_width):
         h
         for h in grid.iter_houses()
         if h.needs_collection and h.trash_type in allowed_today
+        and not getattr(h, 'skipped_today', False)
     ]
     if valid_houses:
         target_node = min(
@@ -386,6 +388,77 @@ def draw_weather_effects(screen, global_state, particles):
             particles.remove(p)
 
 
+def show_trash_popup(screen, image_path, nn_decision, matches, clock):
+    """
+    Wyświetla popup ze zdjęciem śmieci i decyzją sieci neuronowej.
+    Zamyka się po naciśnięciu dowolnego klawisza lub po 3 sekundach.
+    """
+    background = screen.copy()
+
+    trash_img = pygame.image.load(image_path)
+    trash_img = pygame.transform.scale(trash_img, (250, 250))
+
+    popup_w, popup_h = 400, 440
+    popup_x = (WINDOW_WIDTH - popup_w) // 2
+    popup_y = (WINDOW_HEIGHT - popup_h) // 2
+
+    font_title = pygame.font.SysFont('Consolas', 20, bold=True)
+    font_result = pygame.font.SysFont('Consolas', 16, bold=True)
+    font_hint = pygame.font.SysFont('Consolas', 14)
+
+    start_time = pygame.time.get_ticks()
+    popup_duration = 3000
+
+    while True:
+        elapsed = pygame.time.get_ticks() - start_time
+        if elapsed >= popup_duration:
+            break
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            if event.type == pygame.KEYDOWN:
+                return
+
+        screen.blit(background, (0, 0))
+
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
+        overlay.set_alpha(150)
+        overlay.fill((0, 0, 0))
+        screen.blit(overlay, (0, 0))
+
+        pygame.draw.rect(screen, (255, 255, 255), (popup_x, popup_y, popup_w, popup_h), border_radius=12)
+        pygame.draw.rect(screen, (60, 60, 60), (popup_x, popup_y, popup_w, popup_h), 3, border_radius=12)
+
+        title = font_title.render("INSPEKCJA ŚMIECI", True, (0, 0, 0))
+        screen.blit(title, (popup_x + (popup_w - title.get_width()) // 2, popup_y + 15))
+
+        img_x = popup_x + (popup_w - 250) // 2
+        screen.blit(trash_img, (img_x, popup_y + 50))
+
+        result_text = f"Siec rozpoznala: {nn_decision}"
+        result = font_result.render(result_text, True, (0, 0, 0))
+        screen.blit(result, (popup_x + (popup_w - result.get_width()) // 2, popup_y + 315))
+
+        if matches:
+            status_text = "ZABIERAM"
+            status_color = (0, 150, 0)
+        else:
+            status_text = "ZLE SMIECI - NIE ZABIERAM"
+            status_color = (220, 30, 30)
+
+        status = font_result.render(status_text, True, status_color)
+        screen.blit(status, (popup_x + (popup_w - status.get_width()) // 2, popup_y + 350))
+
+        remaining = max(0, popup_duration - elapsed) // 1000 + 1
+        hint = font_hint.render(f"Klawisz lub {remaining}s...", True, (150, 150, 150))
+        screen.blit(hint, (popup_x + (popup_w - hint.get_width()) // 2, popup_y + popup_h - 35))
+
+        pygame.display.flip()
+        clock.tick(FPS)
+
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
@@ -407,6 +480,11 @@ def main():
     decision_model.export_graphviz_dot("output/decision_tree.dot")
     decision_model.print_tree()
     agent.attach_decision_tree(decision_model)
+
+    # Inicjalizacja klasyfikatora sieci neuronowej (CNN)
+    trash_classifier = TrashClassifier()
+    agent.attach_classifier(trash_classifier)
+
     planned_path = []
     path_coords = []   # tu będziemy trzymać piksele naszej linii
     weather_particles = [] # tu trzymamy płatki śniegu i deszcz
@@ -513,9 +591,26 @@ def main():
                     cell = grid.cells[agent.y][agent.x]
                     # stoimy na domku ze śmieciami do zebrania
                     if cell and hasattr(cell, 'needs_collection'):
-                        agent.last_status = f"Zebrano: {cell.trash_type}, {cell.trash_weight} kg"
-                        agent.collect_trash(cell, global_state)
-                        print(f"\nZebrano śmieci! Zapełnienie śmieciarki: {agent.knowledge_base['resources']['current_trash']} kg")
+                        # Inspekcja śmieci siecią neuronową
+                        if agent.trash_classifier and cell.needs_collection:
+                            image_path = agent.trash_classifier.get_random_image(cell.trash_type)
+                            nn_decision = agent.trash_classifier.classify(image_path)
+                            matches = (nn_decision == cell.trash_type)
+
+                            show_trash_popup(screen, image_path, nn_decision, matches, clock)
+
+                            if matches:
+                                agent.last_status = f"Zebrano: {cell.trash_type}, {cell.trash_weight} kg (siec: {nn_decision})"
+                                agent.collect_trash(cell, global_state)
+                                print(f"\nZebrano smieci! Zapelnienie smieciarki: {agent.knowledge_base['resources']['current_trash']} kg")
+                            else:
+                                agent.last_status = f"ZLE SMIECI! Siec: {nn_decision}, oczekiwano: {cell.trash_type}"
+                                cell.skipped_today = True
+                                print(f"\nOdmowa odbioru! Siec wykryla: {nn_decision}, dom ma: {cell.trash_type}")
+                        else:
+                            agent.last_status = f"Zebrano: {cell.trash_type}, {cell.trash_weight} kg"
+                            agent.collect_trash(cell, global_state)
+                            print(f"\nZebrano smieci! Zapelnienie smieciarki: {agent.knowledge_base['resources']['current_trash']} kg")
                     # stoimy na stacji paliw
                     elif cell and hasattr(cell, 'refill_agent'):
                         cell.refill_agent(agent)
