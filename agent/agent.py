@@ -66,9 +66,14 @@ class Agent:
         }}
         self.last_status = "System gotowy"
         self.decision_tree = None
+        self.trash_classifier = None  # klasyfikator sieci neuronowej (CNN)
 
     def attach_decision_tree(self, tree):
         self.decision_tree = tree
+
+    def attach_classifier(self, classifier):
+        """Podpina klasyfikator sieci neuronowej do agenta."""
+        self.trash_classifier = classifier
 
     def get_tree_state_dict(self, global_state, grid):
         row = self.get_discretized_state(global_state, grid)
@@ -158,7 +163,7 @@ class Agent:
         if decision == "DUMP":
             total = sum(self.inventory.values())
             if total <= 0:
-                return station, msg + " → brak śmieci do zrzutu, jadę na stację."
+                return station, msg + " -> brak smieci do zrzutu, jade na stacje."
             biggest_trash_type = max(self.inventory, key=self.inventory.get)
             target_node = None
             for y in range(grid.height):
@@ -174,10 +179,10 @@ class Agent:
                     return (
                         station,
                         msg
-                        + f" → zrzut: {biggest_trash_type} [paliwo: za mało na powrót na stację — tankowanie]",
+                        + f" -> zrzut: {biggest_trash_type} [paliwo: za malo na powrot na stacje -- tankowanie]",
                     )
-                return target_node, msg + f" → zrzut: {biggest_trash_type}"
-            return station, msg + " → brak strefy na mapie, stacja."
+                return target_node, msg + f" -> zrzut: {biggest_trash_type}"
+            return station, msg + " -> brak strefy na mapie, stacja."
 
         if decision == "HOUSE":
             allowed_today = global_state.get_allowed_types_today()
@@ -185,6 +190,7 @@ class Agent:
                 h
                 for h in grid.iter_houses()
                 if h.needs_collection and h.trash_type in allowed_today
+                and not getattr(h, 'skipped_today', False)
             ]
             if valid_houses:
                 target_node = min(
@@ -195,12 +201,12 @@ class Agent:
                     return (
                         station,
                         msg
-                        + f" → dom {target_node.trash_type} [paliwo: za mało na powrót na stację — tankowanie]",
+                        + f" -> dom {target_node.trash_type} [paliwo: za malo na powrot na stacje -- tankowanie]",
                     )
-                return target_node, msg + f" → dom {target_node.trash_type}"
+                return target_node, msg + f" -> dom {target_node.trash_type}"
             if (self.x, self.y) != (station.x, station.y):
-                return station, msg + " → brak domów z odbiorem, wracam do bazy."
-            return None, msg + " → brak domów; jestem w bazie (N — nowy dzień)."
+                return station, msg + " -> brak domow z odbiorem, wracam do bazy."
+            return None, msg + " -> brak domow; jestem w bazie (N -- nowy dzien)."
 
         return None, f"Nieznana decyzja drzewa: {decision}"
 

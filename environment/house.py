@@ -7,10 +7,12 @@ class House:
         self.y = grid_y
         self.possible_types = ["papier", "plastik_metal", "szklo", "bio", "zmieszane"]
         self.designated_trash_type = designated_trash_type
+        self.skipped_today = False  # flaga: agent odmówił odbioru (złe śmieci wg sieci neuronowej)
 
         self.generate_trash(global_state)  # generujemy śmieci uwzględniając porę roku z global_state
 
     def generate_trash(self, global_state):
+        self.skipped_today = False  # reset flagi na nowy dzień
         szansa_na_smieci = random.randint(70, 100)
         self.needs_collection = random.randint(1, 100) <= szansa_na_smieci
 
