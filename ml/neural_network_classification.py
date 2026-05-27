@@ -57,7 +57,7 @@ neuralNetwork = NeuralNetwork().to(device)
 def train_neural_network():
     optimizer = torch.optim.SGD(neuralNetwork.parameters(), lr=0.01) # alg trenujacy - dlugosc kroku to 0.01
     criterion = nn.NLLLoss() # oblicza błąd (uzyskany wynik do oczekiwanego)
-    n_epochs = 20 # Zwiększamy ilość rund do 20, aby sieć miała czas poznać detale
+    n_epochs = 35 
 
     print(f"Rozpoczynam uczenie (Urządzenie: {device})...")
     
