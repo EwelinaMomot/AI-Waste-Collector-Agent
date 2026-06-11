@@ -46,6 +46,7 @@ class Agent:
 
         # struktura slownikowa jako system ram (reprezentacja wiedzy)
         self.knowledge_base={
+            #TODO: powiekszenie wiedzy agenta, po ustaleniu
         "resources": {
             "current_fuel": self.current_fuel ,
             "fuel_capacity": self.fuel_capacity,
@@ -154,15 +155,15 @@ class Agent:
         decision = self.decision_tree.predict(state_dict)
         station = grid.cells[0][grid.width - 1]
 
-        print(f"Drzewo ({decision}): stan={state_dict}")
+        msg = f"Drzewo ({decision}): stan={state_dict}"
 
         if decision == "STATION":
-            return station, "Mało paliwa -> jadę na stację."
+            return station, msg
 
         if decision == "DUMP":
             total = sum(self.inventory.values())
             if total <= 0:
-                return station, "Brak śmieci do zrzutu -> jadę na stację."
+                return station, msg + " -> brak smieci do zrzutu, jade na stacje."
             biggest_trash_type = max(self.inventory, key=self.inventory.get)
             target_node = None
             for y in range(grid.height):
@@ -177,10 +178,11 @@ class Agent:
                 if not self._fuel_ok_to_primary_then_station(grid, target_node):
                     return (
                         station,
-                        f"Zrzut: {biggest_trash_type} [brak paliwa -> stacja]",
+                        msg
+                        + f" -> zrzut: {biggest_trash_type} [paliwo: za malo na powrot na stacje -- tankowanie]",
                     )
-                return target_node, f"Zrzut: {biggest_trash_type}"
-            return station, "Brak strefy na mapie -> jadę na stację."
+                return target_node, msg + f" -> zrzut: {biggest_trash_type}"
+            return station, msg + " -> brak strefy na mapie, stacja."
 
         if decision == "HOUSE":
             allowed_today = global_state.get_allowed_types_today()
@@ -198,12 +200,13 @@ class Agent:
                 if not self._fuel_ok_to_primary_then_station(grid, target_node):
                     return (
                         station,
-                        f"Odbiór: {target_node.trash_type} [brak paliwa -> stacja]",
+                        msg
+                        + f" -> dom {target_node.trash_type} [paliwo: za malo na powrot na stacje -- tankowanie]",
                     )
-                return target_node, f"Jadę po: {target_node.trash_type}"
+                return target_node, msg + f" -> dom {target_node.trash_type}"
             if (self.x, self.y) != (station.x, station.y):
-                return station, "Brak domów z odbiorem -> wracam do bazy."
-            return None, "Jestem w bazie (N - nowy dzien)."
+                return station, msg + " -> brak domow z odbiorem, wracam do bazy."
+            return None, msg + " -> brak domow; jestem w bazie (N -- nowy dzien)."
 
         return None, f"Nieznana decyzja drzewa: {decision}"
 

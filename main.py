@@ -437,7 +437,7 @@ def show_trash_popup(screen, image_path, nn_decision, matches, clock):
         img_x = popup_x + (popup_w - 250) // 2
         screen.blit(trash_img, (img_x, popup_y + 50))
 
-        result_text = f"Skaner rozpoznal: {nn_decision}"
+        result_text = f"Siec rozpoznala: {nn_decision}"
         result = font_result.render(result_text, True, (0, 0, 0))
         screen.blit(result, (popup_x + (popup_w - result.get_width()) // 2, popup_y + 315))
 
@@ -600,17 +600,17 @@ def main():
                             show_trash_popup(screen, image_path, nn_decision, matches, clock)
 
                             if matches:
-                                agent.last_status = f"Zebrano: {cell.trash_type}, {cell.trash_weight} kg (skaner: {nn_decision})"
+                                agent.last_status = f"Zebrano: {cell.trash_type}, {cell.trash_weight} kg (siec: {nn_decision})"
                                 agent.collect_trash(cell, global_state)
-                                print(f"\nZebrano śmieci! Zapełnienie śmieciarki: {agent.knowledge_base['resources']['current_trash']} kg")
+                                print(f"\nZebrano smieci! Zapelnienie smieciarki: {agent.knowledge_base['resources']['current_trash']} kg")
                             else:
-                                agent.last_status = f"ZŁE ŚMIECI! Skaner: {nn_decision}, oczekiwano: {cell.trash_type}"
+                                agent.last_status = f"ZLE SMIECI! Siec: {nn_decision}, oczekiwano: {cell.trash_type}"
                                 cell.skipped_today = True
-                                print(f"\nOdmowa odbioru! Skaner wykryl: {nn_decision}, dom ma: {cell.trash_type}")
+                                print(f"\nOdmowa odbioru! Siec wykryla: {nn_decision}, dom ma: {cell.trash_type}")
                         else:
                             agent.last_status = f"Zebrano: {cell.trash_type}, {cell.trash_weight} kg"
                             agent.collect_trash(cell, global_state)
-                            print(f"\nZebrano śmieci! Zapełnienie śmieciarki: {agent.knowledge_base['resources']['current_trash']} kg")
+                            print(f"\nZebrano smieci! Zapelnienie smieciarki: {agent.knowledge_base['resources']['current_trash']} kg")
                     # stoimy na stacji paliw
                     elif cell and hasattr(cell, 'refill_agent'):
                         cell.refill_agent(agent)
