@@ -1,4 +1,5 @@
 import random
+from genetic_operators import order_crossover, mutate
 
 class GeneticRouteEngine:
     def __init__(self, population_size=100):
@@ -50,7 +51,88 @@ class GeneticRouteEngine:
                 return individual
                 
         return population[-1] # Fallback
+    
+    def evolve(self, houses, generations=100, mutation_rate=0.05):
 
+        population = self.create_initial_population(
+            len(houses)
+        )
+
+        best_route = None
+        best_distance = float("inf")
+
+        for generation in range(generations):
+
+            fitness_scores = [
+                self.calculate_fitness(route, houses)
+                for route in population
+            ]
+
+            #ELITYZM czyli znajdź najlepszego osobnika
+            distances = [
+                self.calculate_total_route_distance(
+                    route,
+                    houses
+                )
+                for route in population
+            ]
+
+            best_idx = distances.index(min(distances))
+            elite = population[best_idx].copy()
+
+            new_population = [elite]
+
+            while len(new_population) < self.population_size:
+
+                parent1 = self.roulette_wheel_selection(
+                    population,
+                    fitness_scores
+                )
+
+                parent2 = self.roulette_wheel_selection(
+                    population,
+                    fitness_scores
+                )
+
+                child = order_crossover(
+                    parent1,
+                    parent2
+                )
+
+                child = mutate(
+                    child,
+                    mutation_rate
+                )
+
+                new_population.append(child)
+
+            population = new_population
+
+            distances = [
+                self.calculate_total_route_distance(
+                    route,
+                    houses
+                )
+                for route in population
+            ]
+
+            current_best = min(distances)
+
+            if current_best < best_distance:
+
+                best_distance = current_best
+
+                best_route = population[
+                    distances.index(current_best)
+                ].copy()
+
+            print(
+                f"Pokolenie {generation + 1}: "
+                f"najlepszy dystans = {current_best}"
+            )
+
+        return best_route, best_distance
+    
 # KOD TESTOWY:
 if __name__ == "__main__":
     print("\nTEST SILNIKA GENETYCZNEGO")
@@ -77,3 +159,29 @@ if __name__ == "__main__":
     print("\nWylosowani rodzice - Ruletka")
     print(f"- Rodzic 1: {parent1} (Dystans: {engine.calculate_total_route_distance(parent1, simulated_houses)})")
     print(f"- Rodzic 2: {parent2} (Dystans: {engine.calculate_total_route_distance(parent2, simulated_houses)})\n")
+
+    print("TEST GENETIC OPERATORS")
+    child = order_crossover(parent1, parent2)
+
+    print("\nPo krzyżowaniu:")
+    print(child)
+
+    child = mutate(child)
+
+    print("\nPo mutacji:")
+    print(child)
+
+    print(
+        f"Dystans dziecka: "
+        f"{engine.calculate_total_route_distance(child, simulated_houses)}"
+    )
+
+    print("TEST BEST ROUTE")
+    best_route, best_distance = engine.evolve(
+    simulated_houses,
+    generations=100
+    )
+
+    print("\nNAJLEPSZA ZNALEZIONA TRASA")
+    print(best_route)
+    print("Dystans:", best_distance)
