@@ -8,6 +8,7 @@ import pygame
 from agent.agent import Agent  # tu strzelam nazewnictwo - Ewelina
 from environment.global_state import GlobalState, Weather
 from environment.grid import Grid  # tu strzelam nazewnictwo - Martyna
+from genetic.genetic_engine import GeneticRouteEngine
 from ml.decision_tree import DecisionTreeID3
 from ml.trash_classifier import TrashClassifier
 from search.astar import astar
@@ -329,6 +330,51 @@ def generate_expert_decision(state_row):
     # Fallback awaryjny 
     return "HOUSE"
 
+def pick_target_with_ga_plan(agent, global_state, grid, ga_plan_queue):
+    """
+    Wybiera kolejny cel z planu GA z zachowaniem tych samych bezpiecznikow
+    co drzewo decyzyjne: krytyczne paliwo i pelna smieciarka maja priorytet.
+    Gdy kolejka GA sie wyczerpie, agent wraca do bazy.
+    """
+    station = grid.cells[0][grid.width - 1]
+    allowed_today = global_state.get_allowed_types_today()
+
+    # 1. Bezpiecznik: krytycznie malo paliwa -> stacja (jak check_fuel_reserve w drzewie)
+    if agent.check_fuel_reserve(station):
+        return station, "GA-Plan: MALO PALIWA! Przerywam plan, jade na stacje!"
+
+    # 2. Bezpiecznik: pelna smieciarka -> wysypisko (jak trash >= 75 w drzewie)
+    if sum(agent.inventory.values()) >= 75:
+        biggest_trash_type = max(agent.inventory, key=agent.inventory.get)
+        for y in range(grid.height):
+            for x in range(grid.width):
+                cell = grid.cells[y][x]
+                if cell and hasattr(cell, "zone_type") and cell.zone_type == biggest_trash_type:
+                    return cell, f"GA-Plan: PELNA PAKA! Jade na wysypisko: {biggest_trash_type}"
+        return None, "GA-Plan: Pelna paka, brak wysypiska na mapie."
+
+    # 3. Weź kolejny domek z planu GA, pomijaj juz zebrane/skipowane
+    while ga_plan_queue:
+        next_house = ga_plan_queue[0]
+        if (next_house.needs_collection
+                and next_house.trash_type in allowed_today
+                and not getattr(next_house, 'skipped_today', False)):
+            # Sprawdz czy starczy paliwa dotrzec do domku I z powrotem na stacje
+            # (ta sama metoda co w agent.select_target_using_tree)
+            if not agent._fuel_ok_to_primary_then_station(grid, next_house):
+                # Nie popujemy - domek zostaje na czele kolejki, wracamy po zatankowaniu
+                return station, f"GA-Plan: Za malo paliwa na {next_house.trash_type} -> stacja (plan kontynuowany po tankowaniu)"
+            ga_plan_queue.pop(0)  # Konsumujemy domek z kolejki
+            return next_house, f"GA-Plan [{len(ga_plan_queue)} pozostalo]: jade po {next_house.trash_type}"
+        else:
+            ga_plan_queue.pop(0)  # Domek nieaktualny - usun i sprawdz nastepny
+
+    # 4. Kolejka GA wyczerpana -> powrot do bazy
+    if (agent.x, agent.y) != (station.x, station.y):
+        return station, "GA-Plan: Wszystkie domki odwiedzone! Wracam do bazy."
+    return None, "GA-Plan zakonczony! Jestem w bazie. (N - nowy dzien)"
+
+
 def calculate_path_coords(start_x, start_y, start_dir, planned_path):
     coords = []
     curr_x = start_x
@@ -490,6 +536,12 @@ def main():
     weather_particles = [] # tu trzymamy płatki śniegu i deszcz
     current_target = None # Współrzędne celu, do którego jedziemy
 
+    # --- Algorytm genetyczny ---
+    genetic_engine = GeneticRouteEngine(population_size=100)
+    ga_route_houses = []    # lista (x, y) domków w kolejności wyznaczonej przez GA (wizualizacja)
+    ga_route_surface = None # Surface z narysowaną trasą GA
+    ga_plan_queue = []      # lista obiektów domków do odwiedzenia wg planu GA (sterowanie)
+
     running = True
     frame_count = 0  
 
@@ -509,26 +561,96 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
             # zmiana dnia po wciśnięciu klawisza 'N'
-            elif event.type in (AUTO_N_EVENT ,pygame.KEYDOWN,AUTO_SPACE_EVENT):
-                if (event.type==pygame.KEYDOWN and event.key == pygame.K_n) or event.type==AUTO_N_EVENT:
+            elif event.type in (AUTO_N_EVENT, pygame.KEYDOWN, AUTO_SPACE_EVENT):
+                if (event.type == pygame.KEYDOWN and event.key == pygame.K_n) or event.type == AUTO_N_EVENT:
                     global_state.next_day()
                     for h in grid.iter_houses():
                         h.generate_trash(global_state)
                         
                     agent.sync_knowledge(global_state)
+                    # Reset trasy GA przy nowym dniu
+                    ga_route_houses = []
+                    ga_route_surface = None
+                    ga_plan_queue = []  # reset planu GA przy nowym dniu
+
+                # --- Klawisz G: uruchom algorytm genetyczny i wyznacz optymalną trasę ---
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_g:
+                    allowed_today = global_state.get_allowed_types_today()
+                    houses_for_ga = [
+                        h for h in grid.iter_houses()
+                        if h.needs_collection and h.trash_type in allowed_today
+                        and not getattr(h, 'skipped_today', False)
+                    ]
+                    if len(houses_for_ga) < 2:
+                        agent.last_status = "GA: Za mało domków do zaplanowania trasy (min. 2)."
+                        print("[GA] Za mało domków z odbiorem do uruchomienia algorytmu.")
+                    else:
+                        print(f"\n[GA] Uruchamiam algorytm genetyczny dla {len(houses_for_ga)} domków...")
+                        agent.last_status = f"GA: Planuję trasę dla {len(houses_for_ga)} domków..."
+                        house_coords = [(h.x, h.y) for h in houses_for_ga]
+                        start_pos = (agent.x, agent.y)
+                        best_route, best_dist, history = genetic_engine.evolve(
+                            house_coords,
+                            generations=100,
+                            start_pos=start_pos
+                        )
+                        ga_route_houses = [house_coords[i] for i in best_route]
+                        # Zapisujemy obiekty domków w kolejności GA jako plan dnia
+                        ga_plan_queue = [houses_for_ga[i] for i in best_route]
+                        print(f"[GA] Plan dnia ustawiony: {len(ga_plan_queue)} domków do odwiedzenia.")
+                        # Logi ewolucji w konsoli
+                        print(f"[GA] Ewolucja zakończona!")
+                        print(f"[GA] Dystans początkowy (gen. 1):   {history[0]}")
+                        print(f"[GA] Dystans końcowy   (gen. 100): {history[-1]}")
+                        improvement = history[0] - history[-1]
+                        print(f"[GA] Poprawa: -{improvement} jednostek ({improvement/history[0]*100:.1f}%)")
+                        agent.last_status = f"GA: Trasa gotowa! Dystans: {best_dist} (poprawa: -{improvement})"
+                        # Rysujemy trasę GA na osobnej półprzezroczystej powierzchni
+                        # Linie łączą domki w stylu Manhattan (najpierw poziomo, potem pionowo)
+                        # — tak jak faktycznie porusza się agent po siatce.
+                        ga_route_surface = pygame.Surface(
+                            (GRID_WIDTH * TILE_SIZE, GRID_HEIGHT * TILE_SIZE), pygame.SRCALPHA
+                        )
+                        ga_route_surface.fill((0, 0, 0, 0))
+                        route_points = [start_pos] + ga_route_houses + [(0, 0)]
+                        pixel_points = [
+                            (rx * TILE_SIZE + TILE_SIZE // 2, ry * TILE_SIZE + TILE_SIZE // 2)
+                            for rx, ry in route_points
+                        ]
+                        # Rysuj L-kształtne odcinki między kolejnymi punktami trasy
+                        num_font = pygame.font.SysFont('Consolas', 12, bold=True)
+                        for seg_idx in range(len(pixel_points) - 1):
+                            x1, y1 = pixel_points[seg_idx]
+                            x2, y2 = pixel_points[seg_idx + 1]
+                            mid = (x2, y1)  # punkt łamania: najpierw poziomo, potem pionowo
+                            pygame.draw.line(ga_route_surface, (0, 200, 80, 160), (x1, y1), mid, 3)
+                            pygame.draw.line(ga_route_surface, (0, 200, 80, 160), mid, (x2, y2), 3)
+                        # Kółka i numerki na każdym domku (pomijamy start i bazę)
+                        for idx, (px, py) in enumerate(pixel_points[1:-1], start=1):
+                            pygame.draw.circle(ga_route_surface, (0, 180, 60, 200), (px, py), 8)
+                            num_surf = num_font.render(str(idx), True, (255, 255, 255))
+                            ga_route_surface.blit(num_surf, (px - num_surf.get_width() // 2, py - num_surf.get_height() // 2))
 
             # zmiana celu: Po wciśnięciu SPACJI śmieciarka wybiera nowy cel i szuka do niego drogi
 
-                if (event.type==pygame.KEYDOWN and event.key == pygame.K_SPACE) or  event.type==AUTO_SPACE_EVENT:
+                if (event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE) or event.type == AUTO_SPACE_EVENT:
                     print("Spacja naciśnięta - wybieram cel...")
                     if datasetCreationMode:
                         target_node, msg = pick_target_heuristic(
                             agent, global_state, grid, GRID_WIDTH
                         )
                     else:
-                        target_node, msg = agent.select_target_using_tree(
-                            global_state, grid
-                        )
+                        # Jeśli mamy aktywny plan GA -> podążaj kolejnością GA
+                        # z zachowaniem bezpieczników (paliwo, pełna paka)
+                        if ga_plan_queue:
+                            target_node, msg = pick_target_with_ga_plan(
+                                agent, global_state, grid, ga_plan_queue
+                            )
+                        else:
+                            # Fallback: brak planu GA -> drzewo decyzyjne jak poprzednio
+                            target_node, msg = agent.select_target_using_tree(
+                                global_state, grid
+                            )
                     print(msg)
                     agent.last_status = msg
 
@@ -539,7 +661,7 @@ def main():
                                 state_row = agent.get_discretized_state(global_state, grid)
                                 
                                 decision = generate_expert_decision(state_row)
-        
+    
                                 full_entry = state_row + [decision]
                                 training_data.append(full_entry)
                                                     
@@ -581,7 +703,7 @@ def main():
            # WYKONANIE RUCHU: Jeśli mamy zaplanowaną ścieżkę, wykonujemy jeden krok co kilka klatek
             if planned_path:
                 next_action = planned_path.pop(0) # Pobierz pierwszą akcję z listy
-                agent.execute_action(next_action, global_state,grid)
+                agent.execute_action(next_action, global_state, grid)
 
                 # odświeżamy linię po każdym kroku agenta (żeby znikała z tyłu)
                 path_coords = calculate_path_coords(agent.x, agent.y, agent.direction, planned_path)
@@ -631,14 +753,18 @@ def main():
                 rect = pygame.Surface((TILE_SIZE, TILE_SIZE))
                 rect.set_alpha(60) # przezroczystość (im więcej razy algorytm sprawdził pole, tym będzie bardziej różowe!)
                 rect.fill((251, 82, 231))
-                screen.blit(rect, (vx * TILE_SIZE+ INFO_PANEL_WIDTH, vy * TILE_SIZE))
+                screen.blit(rect, (vx * TILE_SIZE + INFO_PANEL_WIDTH, vy * TILE_SIZE))
 
-        # RYSOWANIE ŚCIEŻKI
+        # RYSOWANIE ŚCIEŻKI A*
         if len(path_coords) > 1:
             offset_coords = [(cx + INFO_PANEL_WIDTH, cy) for cx, cy in path_coords]
             pygame.draw.lines(screen, (255, 0, 0), False, offset_coords, 4)
             cel_x, cel_y = offset_coords[-1]
             pygame.draw.circle(screen, (0, 0, 255), (cel_x, cel_y), 5)
+
+        # RYSOWANIE TRASY GA (półprzezroczyste zielone linie)
+        if ga_route_surface is not None:
+            screen.blit(ga_route_surface, (INFO_PANEL_WIDTH, 0))
 
         agent.draw(screen, assets, TILE_SIZE)
 
