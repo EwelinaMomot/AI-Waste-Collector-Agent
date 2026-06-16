@@ -1,5 +1,5 @@
 import random
-from genetic_operators import order_crossover, mutate
+from genetic.genetic_operators import order_crossover, mutate
 
 class GeneticRouteEngine:
     def __init__(self, population_size=100):
@@ -9,10 +9,10 @@ class GeneticRouteEngine:
         # Odległość Manhattana
         return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
 
-    def calculate_total_route_distance(self, route, houses):
+    def calculate_total_route_distance(self, route, houses, start_pos=(0, 0)):
         # Całkowity dystans trasy
         total_dist = 0
-        current_pos = (0, 0)  # Start z bazy (0,0)
+        current_pos = start_pos  # Start z aktualnej pozycji agenta
         
         for house_idx in route:
             house_pos = houses[house_idx]
@@ -22,9 +22,9 @@ class GeneticRouteEngine:
         total_dist += self.calculate_distance(current_pos, (0, 0)) # Powrót do bazy
         return total_dist
 
-    def calculate_fitness(self, route, houses):
+    def calculate_fitness(self, route, houses, start_pos=(0, 0)):
         # Fitness (odwrotność dystansu)
-        distance = self.calculate_total_route_distance(route, houses)
+        distance = self.calculate_total_route_distance(route, houses, start_pos)
         return 1.0 / (float(distance) + 1e-6) # Zabezpieczenie przed /0
 
     def create_initial_population(self, num_houses):
@@ -52,7 +52,7 @@ class GeneticRouteEngine:
                 
         return population[-1] # Fallback
     
-    def evolve(self, houses, generations=100, mutation_rate=0.05):
+    def evolve(self, houses, generations=100, mutation_rate=0.05, start_pos=(0, 0)):
 
         population = self.create_initial_population(
             len(houses)
@@ -60,11 +60,12 @@ class GeneticRouteEngine:
 
         best_route = None
         best_distance = float("inf")
+        generation_history = []  # historia dystansów per pokolenie
 
         for generation in range(generations):
 
             fitness_scores = [
-                self.calculate_fitness(route, houses)
+                self.calculate_fitness(route, houses, start_pos)
                 for route in population
             ]
 
@@ -72,7 +73,8 @@ class GeneticRouteEngine:
             distances = [
                 self.calculate_total_route_distance(
                     route,
-                    houses
+                    houses,
+                    start_pos
                 )
                 for route in population
             ]
@@ -111,12 +113,14 @@ class GeneticRouteEngine:
             distances = [
                 self.calculate_total_route_distance(
                     route,
-                    houses
+                    houses,
+                    start_pos
                 )
                 for route in population
             ]
 
             current_best = min(distances)
+            generation_history.append(current_best)
 
             if current_best < best_distance:
 
@@ -127,11 +131,11 @@ class GeneticRouteEngine:
                 ].copy()
 
             print(
-                f"Pokolenie {generation + 1}: "
+                f"[GA] Pokolenie {generation + 1:>3}/{generations}: "
                 f"najlepszy dystans = {current_best}"
             )
 
-        return best_route, best_distance
+        return best_route, best_distance, generation_history
     
 # KOD TESTOWY:
 if __name__ == "__main__":
@@ -177,7 +181,7 @@ if __name__ == "__main__":
     )
 
     print("TEST BEST ROUTE")
-    best_route, best_distance = engine.evolve(
+    best_route, best_distance, history = engine.evolve(
     simulated_houses,
     generations=100
     )
@@ -185,3 +189,4 @@ if __name__ == "__main__":
     print("\nNAJLEPSZA ZNALEZIONA TRASA")
     print(best_route)
     print("Dystans:", best_distance)
+    print(f"Ewolucja: start={history[0]}, koniec={history[-1]}")
