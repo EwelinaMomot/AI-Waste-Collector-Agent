@@ -13,8 +13,9 @@ Projekt łączy klasyczne algorytmy sztucznej inteligencji, uczenie maszynowe or
 ✅ Optymalizacja tras przejazdu                 
 ✅ Inteligentne zarządzanie zasobami               
 ✅ Symulacja dynamicznego środowiska                 
-✅ Wykorzystanie własnej implementacji drzewa decyzyjnego ID3             
-✅ Wykorzystanie własnej implementacji algorytmu A*                  
+✅ Wykorzystanie własnej implementacji drzewa decyzyjnego ID3     
+✅ Wykorzystanie algorytmu genetycznego do optymalizacji harmonogramu wywozu         
+✅ Wykorzystanie własnej implementacji algorytmu A*                 
 ✅ Integracja sieci neuronowej CNN do klasyfikacji odpadów             
 ✅ Demonstracja współpracy wielu technik AI w jednym systemie                        
 
@@ -36,11 +37,23 @@ Agent podejmuje decyzje na podstawie:
 
 ### Możliwe decyzje
 
-| Decyzja   | Opis                   |
-| --------- | ---------------------- |
-| HOUSE  | Odbiór odpadów         |
+| Decyzja | Opis                   |
+| ------- | ---------------------- |
+| HOUSE   | Odbiór odpadów         |
 | STATION | Tankowanie             |
-| DUMP  | Opróżnienie śmieciarki |
+| DUMP    | Opróżnienie śmieciarki |
+
+---
+
+## Moduł optymalizacji tras - Algorytm Genetyczny
+
+Zamiast krótkowzrocznego wyboru najbliższego celu, agent wykorzystuje algorytm genetyczny do zaplanowania globalnej, optymalnej trasy odwiedzin na dany dzień (Problem Komiwojażera - TSP).
+
+* **Selekcja:** Reguła ruletki faworyzująca najlepsze (najkrótsze) trasy.
+
+* **Reprodukcja:** Operacje krzyżowania (crossover) i mutacji zapewniające różnorodność genetyczną w kolejnych pokoleniach.
+
+* **Ewolucja:** Pętla pokoleniowa znajdująca najbardziej optymalną ścieżkę przejazdu minimalizującą zużycie paliwa.
 
 ---
 
@@ -53,6 +66,8 @@ Po wybraniu celu agent uruchamia algorytm **A*** i wyszukuje optymalną ścieżk
 * zużycie paliwa,
 * aktualną pogodę,
 * wagę przewożonych odpadów.
+
+> Algorytm genetyczny ustala globalną kolejność odwiedzania domów, a następnie algorytm A* jest wykorzystywany do wyznaczenia dokładnej ścieżki przejazdu pomiędzy poszczególnymi, wybranymi punktami.
 
 ---
 
@@ -131,7 +146,8 @@ Dzięki temu może przewidywać koszty działań i podejmować bezpieczne decyzj
 📦 inteligentna-smieciarka
 ┣ 📂 agent/            # logika autonomicznego agenta
 ┣ 📂 environment/      # środowisko symulacji
-┣ 📂 search/           # algorytmy nawigacyjne
+┣ 📂 genetic/          # implementacja algorytmu genetycznego i operatorów
+┣ 📂 search/           # algorytmy nawigacyjne (A*, BFS)
 ┣ 📂 ml/               # moduły sztucznej inteligencji
 ┣ 📂 dataset_images/   # zbiór danych dla CNN
 ┣ 📂 assets/           # grafiki i zasoby wizualne
@@ -175,10 +191,11 @@ python main.py
 
 # Sterowanie
 
-| Klawisz | Funkcja                           |
-| ------- | --------------------------------- |
-| `SPACE` | Wykonanie kolejnej decyzji agenta |
-| `N`     | Przejście do następnego dnia      |
+| Klawisz | Funkcja                             |
+| ------- | ----------------------------------- |
+| `SPACE` | Wykonanie kolejnej decyzji agenta   |
+| `N`     | Przejście do następnego dnia        |
+| `G`     | Uruchomienie algorytmu genetycznego |
 
 ---
 
@@ -196,6 +213,7 @@ python main.py
 * Trenowanie i integracja drzewa decyzyjnego
 * Wizualizacja wyników klasyfikacji odpadów
 * Rozwój warstwy wizualnej projektu
+* Integracja algorytmu genetycznego z działaniem aplikacji
 * Integracja wszystkich modułów systemu
 
 ---
@@ -212,6 +230,7 @@ python main.py
 * Integracja predykcji ID3 z agentem
 * Mechanizm szacowania kosztów przejazdu
 * Integracja CNN z agentem
+* Implementacja parametru start_pos dla algorytmu genetycznego oraz poprawa systemu logowania
 
 ---
 
@@ -223,11 +242,12 @@ python main.py
 * Mechanizmy ruchu i reprezentacji wiedzy
 * Zarządzanie paliwem, pojemnością i masą odpadów
 * Modelowanie wpływu ciężaru na spalanie
-* Funkcjonalność częściowego odbióru odpadów
+* Funkcjonalność częściowego odbioru odpadów
 * Przygotowanie zbioru danych pod machine learning
 * Funkcjonalność automatycznej rozgrywki do generowania danych
 * Projekt, implementacja i trenowanie sieci neuronowej
 * Optymalizacja procesu trenowania
+* Implementacja operacji krzyżowania (crossover), mutacji oraz funkcji evolve w algorytmie genetycznym
 
 ---
 
@@ -243,6 +263,7 @@ python main.py
 * Heatmapa działania A*
 * Integracja assetów graficznych
 * Przygotowanie zbiorów danych obrazowych
+* Implementacja silnika algorytmu genetycznego oraz mechanizmu selekcji (koło ruletki)
 * Dokumentacja projektu
 
 ---
