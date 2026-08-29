@@ -169,6 +169,8 @@ Dzięki temu może przewidywać koszty działań i podejmować bezpieczne decyzj
 | Operacje na obrazach | Pillow      |
 
 ---
+<video src="assets\demo_videos\videodemo.mp4" width="100%" controls></video>
+---
 
 # Uruchomienie projektu
 

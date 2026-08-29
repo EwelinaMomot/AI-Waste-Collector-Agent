@@ -173,6 +173,7 @@ This allows it to predict action costs and make safe decisions.
 | Image Processing     | Pillow      |
 
 ---
+<video src="assets\demo_videos\videodemo.mp4" width="100%" controls></video>
 
 # Running the Project
 
